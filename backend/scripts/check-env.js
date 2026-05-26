@@ -2,7 +2,7 @@
  * Validates required env vars before running a command.
  * Loads .env if it exists (optional convenience), then checks vars.
  *
- * Dev/start: BACKEND_PORT, SURF_API_KEY
+ * Dev/start: BACKEND_PORT
  */
 const fs = require('node:fs')
 const path = require('node:path')
@@ -24,7 +24,9 @@ if (fs.existsSync(envPath)) {
 
 const args = process.argv.slice(2)
 
-const required = ['BACKEND_PORT', 'SURF_API_KEY']
+// 🔥 여기서 SURF_API_KEY를 지워버렸습니다! 
+// 이제 우리 서버는 BACKEND_PORT(8000) 하나만 있으면 당당하게 켜집니다.
+const required = ['BACKEND_PORT']
 const missing = required.filter(k => !process.env[k])
 
 if (missing.length > 0) {
