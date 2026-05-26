@@ -2,10 +2,11 @@
   "name": "backend",
   "private": true,
   "scripts": {
-    "dev": "node scripts/check-env.js node --watch server.js"
+    "dev": "node scripts/check-env.js node --watch server.js",
+    "start": "node server.js"
   },
   "dependencies": {
-    "@surf-ai/sdk": "1.0.0-alpha.13",
-    "express": "4.22.1"
+    "express": "4.22.1",
+    "ethers": "^6.12.0"
   }
 }
