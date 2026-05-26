@@ -13,7 +13,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// [블록체인 세팅 (Arbitrum Sepolia)]
+// [블록체인 세팅]
 const RPC_URL = 'https://sepolia-rollup.arbitrum.io/rpc';
 const provider = new ethers.JsonRpcProvider(RPC_URL);
 
@@ -25,13 +25,11 @@ const WON_ADDRESS = '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB';
 const WON_ABI = ["event Transfer(address indexed from, address indexed to, uint256 value)"];
 const wonContract = new ethers.Contract(WON_ADDRESS, WON_ABI, provider);
 
-// 🔥 [수정 1] 과거 데이터를 모두 긁어오도록 시작 블록을 5월 초(260,000,000)로 넉넉하게 롤백
 const START_BLOCK = 260000000; 
-// 🔥 [수정 2] 5월 22일(한국시간 자정)을 기점으로 나누기 1000을 적용하기 위한 기준 시간 (Unix Timestamp)
 const MAY_22_TIMESTAMP = Math.floor(new Date('2026-05-22T00:00:00+09:00').getTime() / 1000);
 
 // ----------------------------------------------------
-// 1. 핵심 에너지 계량 데이터 API (진짜 온체인 연동)
+// 1. 핵심 에너지 계량 데이터 API
 // ----------------------------------------------------
 app.get('/api/energy', async (req, res) => {
   try {
@@ -46,7 +44,6 @@ app.get('/api/energy', async (req, res) => {
       let powerValue = Number(log.args[1]);
       const timestamp = Number(log.args[2]);
       
-      // 🔥 [수정 3] 22일 이후 기록은 1000으로 나누어 단위 맞추기
       if (timestamp >= MAY_22_TIMESTAMP) {
         powerValue = powerValue / 1000;
       }
@@ -57,17 +54,16 @@ app.get('/api/energy', async (req, res) => {
         txHash: log.transactionHash,
         blockNumber: log.blockNumber,
         logIndex: log.index,
-        wh: Number(powerValue.toFixed(4)), // 소수점 너무 길게 안 나오게 4자리 컷
+        wh: Number(powerValue.toFixed(4)), 
         kWh: Number((powerValue / 1000).toFixed(6)),
         timestamp: timestamp,
         date: new Date(timestamp * 1000).toISOString()
       };
     });
 
-    // 🔥 [수정 4] 무조건 '최신 시간(timestamp)'이 맨 위로 오도록 강제 정렬 (내림차순)
-    readings.sort((a, b) => b.timestamp - a.timestamp);
+    // 🔥 [완벽 해결 1] 정렬을 '과거 -> 최신(오름차순)'으로 원상복구!
+    readings.sort((a, b) => a.timestamp - b.timestamp);
 
-    // 총합 소수점 에러(14606.204000005...) 방지용 깔끔한 반올림
     totalWh = Number(totalWh.toFixed(4));
     const currentBlock = await provider.getBlockNumber();
 
@@ -84,8 +80,9 @@ app.get('/api/energy', async (req, res) => {
         estimatedCostKRW: Math.floor((totalWh / 1000) * 150),
         totalGasUsed: 0,
         totalGasCostGwei: 0,
-        firstReading: readings.length > 0 ? readings[readings.length - 1] : null,
-        lastReading: readings.length > 0 ? readings[0] : null
+        // 🔥 [완벽 해결 2] 배열 순서가 바뀌었으니 첫/마지막 데이터 포인터도 변경!
+        firstReading: readings.length > 0 ? readings[0] : null,          // 배열 첫 번째가 가장 옛날 거
+        lastReading: readings.length > 0 ? readings[readings.length - 1] : null // 배열 마지막이 제일 최신 거
       },
       readings: readings
     });
