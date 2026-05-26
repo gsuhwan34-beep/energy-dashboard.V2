@@ -1,9 +1,10 @@
 const express = require('express');
+const { ethers } = require('ethers');
 const app = express();
 
 const PORT = process.env.BACKEND_PORT || 8000;
 
-// [필수] 프론트엔드(Vercel)에서 오는 요청을 허락해주는 CORS 설정
+// [CORS 설정]
 app.use(express.json());
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -12,90 +13,145 @@ app.use((req, res, next) => {
   next();
 });
 
+// [블록체인 세팅 (Arbitrum Sepolia)]
+const RPC_URL = 'https://sepolia-rollup.arbitrum.io/rpc';
+const provider = new ethers.JsonRpcProvider(RPC_URL);
+
+// 1. 에너지 미터 컨트랙트
+const METER_ADDRESS = '0xb551a87e38E7A838d9E8C3ef2CDbD40725Ad6a7B';
+const METER_ABI = ["event EnergyDataRecorded(address indexed device, uint256 powerValue, uint256 timestamp)"];
+const meterContract = new ethers.Contract(METER_ADDRESS, METER_ABI, provider);
+
+// 2. WON 토큰 컨트랙트
+const WON_ADDRESS = '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB';
+const WON_ABI = ["event Transfer(address indexed from, address indexed to, uint256 value)"];
+const wonContract = new ethers.Contract(WON_ADDRESS, WON_ABI, provider);
+
+// 캡스톤 배포 시점 블록 (너무 옛날 블록부터 긁으면 RPC 에러가 나므로 기준점 설정)
+const START_BLOCK = 270000000; 
+
 // ----------------------------------------------------
-// 1. 네트워크 상태 API (useNetworkStatus)
+// 1. 핵심 에너지 계량 데이터 API (진짜 온체인 연동)
 // ----------------------------------------------------
-app.get('/api/energy/network', (req, res) => {
-  res.json({
-    network: 'Arbitrum Sepolia',
-    chainId: 421614,
-    latestBlock: 271084099,
-    rpcUrl: 'https://sepolia-rollup.arbitrum.io/rpc',
-    contract: '0xb551...6a7b',
-    status: 'connected'
-  });
+app.get('/api/energy', async (req, res) => {
+  try {
+    const wallet = req.query.wallet;
+    if (!wallet || wallet === 'unknown') throw new Error("Wallet address is required");
+
+    // 1. 해당 지갑(device)에서 발생한 이벤트 필터링
+    const filter = meterContract.filters.EnergyDataRecorded(wallet);
+    
+    // 2. 블록체인에서 실제 이벤트 로그 긁어오기
+    const logs = await meterContract.queryFilter(filter, START_BLOCK, 'latest');
+    
+    // 3. 최신 데이터가 위로 오도록 뒤집기 및 데이터 정제
+    let totalWh = 0;
+    const readings = logs.map((log, index) => {
+      const powerValue = Number(log.args[1]);
+      const timestamp = Number(log.args[2]);
+      
+      totalWh += powerValue;
+      
+      return {
+        txHash: log.transactionHash,
+        blockNumber: log.blockNumber,
+        logIndex: log.index,
+        wh: powerValue,
+        kWh: powerValue / 1000,
+        timestamp: timestamp,
+        date: new Date(timestamp * 1000).toISOString()
+      };
+    }).reverse();
+
+    const currentBlock = await provider.getBlockNumber();
+
+    res.json({
+      wallet: wallet,
+      contract: METER_ADDRESS,
+      network: 'Arbitrum Sepolia',
+      chainId: 421614,
+      latestBlock: currentBlock,
+      overview: {
+        totalReadings: readings.length,
+        totalWh: totalWh,
+        totalKWh: totalWh / 1000,
+        estimatedCostKRW: Math.floor((totalWh / 1000) * 150), // 150원/kWh 기준
+        totalGasUsed: 0,
+        totalGasCostGwei: 0,
+        firstReading: readings.length > 0 ? readings[readings.length - 1] : null,
+        lastReading: readings.length > 0 ? readings[0] : null
+      },
+      readings: readings
+    });
+  } catch (error) {
+    console.error("Energy fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch on-chain data" });
+  }
 });
 
 // ----------------------------------------------------
-// 2. 주간 정산 내역 API (useSettlements)
+// 2. 주간 정산 내역 API (진짜 온체인 연동)
 // ----------------------------------------------------
-app.get('/api/energy/settlements', (req, res) => {
-  res.json({
-    suppliers: [
-      '0xf7486A72851c1054661e9E6bF96f1ACcb1f7b6F8', 
-      '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
-    ],
-    wonToken: '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB',
-    transfers: [
-      {
-        txHash: '0xabc1234567890abcdef',
-        blockNumber: 271084000,
-        timestamp: Math.floor(Date.now() / 1000) - 86400, // 어제
-        from: '0xUserWalletAddress...',
-        to: '0xf7486A72851c1054661e9E6bF96f1ACcb1f7b6F8',
-        wonAmount: 1344.70
-      }
-    ]
-  });
+app.get('/api/energy/settlements', async (req, res) => {
+  try {
+    // 공급자 지갑 주소 2개
+    const suppliers = [
+      '0xf7486A72851c1054661e9E6bF96f1ACcb1f7b6F8', // 신재생
+      '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'  // 일반혼합
+    ];
+
+    // 공급자에게 들어온(to) WON 토큰 전송 내역 긁어오기
+    let allTransfers = [];
+    for (const supplier of suppliers) {
+      const filter = wonContract.filters.Transfer(null, supplier);
+      const logs = await wonContract.queryFilter(filter, START_BLOCK, 'latest');
+      
+      const transfers = logs.map(log => ({
+        txHash: log.transactionHash,
+        blockNumber: log.blockNumber,
+        timestamp: Math.floor(Date.now() / 1000), // 이벤트 내 타임스탬프가 없으므로 현재 시간 대체 또는 블록 조회 필요 (단순화)
+        from: log.args[0],
+        to: log.args[1],
+        wonAmount: Number(ethers.formatUnits(log.args[2], 18))
+      }));
+      allTransfers = allTransfers.concat(transfers);
+    }
+
+    // 최신순 정렬
+    allTransfers.sort((a, b) => b.blockNumber - a.blockNumber);
+
+    res.json({
+      suppliers: suppliers,
+      wonToken: WON_ADDRESS,
+      transfers: allTransfers
+    });
+  } catch (error) {
+    console.error("Settlement fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch settlements" });
+  }
 });
 
 // ----------------------------------------------------
-// 3. 핵심 에너지 계량 데이터 API (useEnergyData)
+// 3. 네트워크 상태 API
 // ----------------------------------------------------
-app.get('/api/energy', (req, res) => {
-  const wallet = req.query.wallet || 'unknown';
-
-  // 캡스톤 시연 시 그래프와 트랜잭션이 풍성하게 보이도록 
-  // 최근 27개의 실감나는 가상 계량 데이터를 생성합니다.
-  const mockReadings = Array.from({ length: 27 }).map((_, i) => {
-    const timeOffset = i * 3600000; // 1시간 간격
-    return {
-      txHash: `0x${Math.random().toString(16).slice(2, 42)}`,
-      blockNumber: 270986697 + i,
-      logIndex: i,
-      wh: +(0.048 + (Math.random() * 0.01)).toFixed(3),
-      kWh: 0.000048,
-      timestamp: Math.floor((Date.now() - timeOffset) / 1000),
-      date: new Date(Date.now() - timeOffset).toISOString()
-    };
-  });
-
-  res.json({
-    wallet: wallet,
-    contract: '0xb551...6a7b',
-    network: 'Arbitrum Sepolia',
-    chainId: 421614,
-    latestBlock: 271084099,
-    overview: {
-      totalReadings: 27,
-      totalWh: 14606.2,
-      totalKWh: 14.6062,
-      estimatedCostKRW: 1753,
-      totalGasUsed: 21000,
-      totalGasCostGwei: 0.01,
-      firstReading: mockReadings[mockReadings.length - 1], // 가장 오래된 데이터
-      lastReading: mockReadings[0] // 최신 데이터
-    },
-    readings: mockReadings
-  });
+app.get('/api/energy/network', async (req, res) => {
+  try {
+    const blockNum = await provider.getBlockNumber();
+    res.json({
+      network: 'Arbitrum Sepolia',
+      chainId: 421614,
+      latestBlock: blockNum,
+      rpcUrl: RPC_URL,
+      contract: METER_ADDRESS,
+      status: 'connected'
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Network disconnected' });
+  }
 });
 
-// 서버 기본 접속 테스트용
-app.get('/', (req, res) => {
-  res.send('✅ MVP Grid Lab API is fully independent and running!');
-});
+app.get('/', (req, res) => res.send('✅ Real Web3 Backend is running!'));
 
-// 서버 실행
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Independent Backend running on port ${PORT}`);
+  console.log(`🚀 Independent Web3 Backend running on port ${PORT}`);
 });
