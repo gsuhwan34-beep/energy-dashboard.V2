@@ -39,7 +39,7 @@ export const SUPPLIERS: Record<string, EnergySupplier> = {
     label: '일반 혼합 전력',
     emoji: '🏭',
     rate: 100,
-    wallet: '0x0C6F6f9FA1BB851AeF9e08c57E4E2a9820858D8e', // 🔥 새로 주신 혼합 전력 지갑 주소 완벽 적용!
+    wallet: '0x0C6F6f9FA1BB851AeF9e08c57E4E2a9820858D8e',
     description: '화석+원자력 혼합 발전',
   },
 }
@@ -132,3 +132,84 @@ export function useWallet() {
   }, [checkNetwork])
 
   // 연결 해제
+  const disconnect = useCallback(() => {
+    setState({
+      address: null,
+      isConnected: false,
+      isCorrectNetwork: false,
+      isConnecting: false,
+      error: null,
+    })
+  }, [])
+
+  // WON 토큰 전송 (정산) — 공급자별 지갑 + 요금 반영
+  const transferWon = useCallback(async (amountKwh: number, supplierWallet: string, ratePerKwh: number): Promise<string> => {
+    if (!window.ethereum || !state.isConnected) {
+      throw new Error('지갑이 연결되어 있지 않습니다.')
+    }
+
+    const wonAmount = amountKwh * ratePerKwh
+    const provider = new BrowserProvider(window.ethereum)
+    const signer = await provider.getSigner()
+    const contract = new Contract(WON_TOKEN_ADDRESS, WON_TOKEN_ABI, signer)
+
+    // 18 decimals
+    const amount = parseUnits(wonAmount.toString(), 18)
+    const tx = await contract.transfer(supplierWallet, amount)
+    const receipt = await tx.wait()
+
+    return receipt.hash
+  }, [state.isConnected])
+
+  // 계정/체인 변경 감지
+  useEffect(() => {
+    if (!window.ethereum) return
+
+    const handleAccountsChanged = (accounts: string[]) => {
+      if (accounts.length === 0) {
+        disconnect()
+      } else {
+        setState(s => ({ ...s, address: accounts[0] }))
+      }
+    }
+
+    const handleChainChanged = async () => {
+      const isCorrect = await checkNetwork()
+      setState(s => ({ ...s, isCorrectNetwork: isCorrect }))
+    }
+
+    window.ethereum.on('accountsChanged', handleAccountsChanged)
+    window.ethereum.on('chainChanged', handleChainChanged)
+
+    return () => {
+      window.ethereum?.removeListener('accountsChanged', handleAccountsChanged)
+      window.ethereum?.removeListener('chainChanged', handleChainChanged)
+    }
+  }, [checkNetwork, disconnect])
+
+  // 이미 연결된 계정 자동 감지
+  useEffect(() => {
+    if (!window.ethereum) return
+    window.ethereum.request({ method: 'eth_accounts' }).then(async (accounts: string[]) => {
+      if (accounts.length > 0) {
+        const isCorrect = await checkNetwork()
+        setState({
+          address: accounts[0],
+          isConnected: true,
+          isCorrectNetwork: isCorrect,
+          isConnecting: false,
+          error: null,
+        })
+      }
+    }).catch(() => {})
+  }, [checkNetwork])
+
+  return { ...state, connect, disconnect, transferWon }
+}
+
+// Window 타입 확장
+declare global {
+  interface Window {
+    ethereum?: any
+  }
+}
