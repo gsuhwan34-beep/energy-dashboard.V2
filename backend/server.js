@@ -76,7 +76,8 @@ app.get('/api/energy', async (req, res) => {
         totalReadings: readings.length,
         totalWh: totalWh,
         totalKWh: totalWh / 1000,
-        estimatedCostKRW: Math.floor((totalWh / 1000) * 150),
+        // 🔥 [수정 완료] 무조건 내림(Math.floor)하던 것을 없애고 소수점 3자리까지 보존합니다!
+        estimatedCostKRW: Number(((totalWh / 1000) * 150).toFixed(3)),
         totalGasUsed: 0,
         totalGasCostGwei: 0,
         firstReading: readings.length > 0 ? readings[0] : null,
@@ -91,7 +92,7 @@ app.get('/api/energy', async (req, res) => {
 });
 
 // ----------------------------------------------------
-// 2. 주간 정산 내역 API (수정 완료!)
+// 2. 주간 정산 내역 API 
 // ----------------------------------------------------
 app.get('/api/energy/settlements', async (req, res) => {
   try {
