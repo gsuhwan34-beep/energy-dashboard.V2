@@ -27,9 +27,10 @@ export default function App() {
   const overview = data?.overview ?? null
   const readings = data?.readings ?? []
 
-  // 동적 예상 요금 (선택된 공급자 요율 기준)
   const totalKWh = overview?.totalKWh ?? 0
-  const estimatedCost = Math.round(totalKWh * supplier.rate)
+  
+  // 🔥 [수정 1] Math.round()를 제거하여 소수점 데이터(미세 요금) 증발 방지
+  const estimatedCost = totalKWh * supplier.rate
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -114,7 +115,7 @@ export default function App() {
               onClick={() => setSupplierId(s.id)}
               className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-left transition-all ${
                 supplierId === s.id
-                  ? 'border-brand-100 bg-brand-10/50 ring-1 ring-brand-100'
+                  ? 'border-brand-100 bg-bg-base-opaque ring-1 ring-brand-100'
                   : 'border-border-strong bg-bg-base-opaque hover:bg-bg-subtle'
               }`}
             >
@@ -158,7 +159,8 @@ export default function App() {
               />
               <StatCard
                 label="예상 요금"
-                value={`${estimatedCost.toLocaleString()}원`}
+                // 🔥 [수정 2] 화면 표시 시 소수점 최대 3자리까지 강제 노출 (0.071원 등)
+                value={`${estimatedCost.toLocaleString('ko-KR', { maximumFractionDigits: 3 })}원`}
                 sub={`${supplier.emoji} ${supplier.rate} WON/kWh`}
               />
               <StatCard
@@ -211,7 +213,7 @@ export default function App() {
         {/* 빈 상태 */}
         {!data && !loading && !error && (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Zap className="w-8 h-8 text-fg-muted" />
+            <div className="w-8 h-8 border-2 border-brand-100 border-t-transparent rounded-full animate-spin" />
             <p className="text-sm text-fg-muted">계량기 주소를 입력하여 전력 데이터를 조회하세요</p>
           </div>
         )}
