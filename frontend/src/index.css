@@ -312,3 +312,20 @@
     --spacing-128: 64px;
   }
 }
+
+/* 🚨 [캡스톤 MVP 대시보드] 'Made by Surf' 워터마크 영구 삭제용 HACK */
+/* Vercel/Surf가 강제로 넣는 워터마크 클래스들을 화면에서 숨깁니다. */
+[class*="vercel-watermark"],
+[class*="surf-badge"],
+[class*="vercel-badge"],
+div[class*="surf-badge"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  position: absolute !important;
+  overflow: hidden !important;
+  z-index: -9999 !important;
+}
