@@ -28,19 +28,23 @@ export interface EnergySupplier {
 export const SUPPLIERS: Record<string, EnergySupplier> = {
   renewable: {
     id: 'renewable',
-    label: '신재생 에너지',
+    // 🔥 [수정] 밋밋한 이름 대신 실제 지역명과 발전소 이름 부여
+    label: '제주 동복 풍력발전단지', 
     emoji: '🍃',
     rate: 150,
     wallet: '0xf7486A72851c1054661e9E6bF96f1ACcb1f7b6F8',
-    description: '태양광·풍력 등 친환경 에너지',
+    // 🔥 [수정] 설명도 구체적으로 변경
+    description: '제주특별자치도 구좌읍 · 100% 친환경 풍력', 
   },
   mixed: {
     id: 'mixed',
-    label: '일반 혼합 전력',
+    // 🔥 [수정] 일반 전력도 그럴싸하게 변경
+    label: '국가전력망 일반 혼합전력', 
     emoji: '🏭',
     rate: 100,
     wallet: '0x0C6F6f9FA1BB851AeF9e08c57E4E2a9820858D8e',
-    description: '화석+원자력 혼합 발전',
+    // 🔥 [수정] 설명 추가
+    description: '충남 당진 화력 및 원자력 혼합 발전', 
   },
 }
 
