@@ -13,7 +13,7 @@ import { Zap, RefreshCw, Search, AlertCircle, Save } from 'lucide-react'
 
 const DEFAULT_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
 
-// 🔥 대표님의 실제 백엔드 주소 적용 완료!
+// 🚨 [필수 확인] 여기에 대표님의 실제 Render 백엔드 주소를 넣어주세요! 
 const BACKEND_URL = 'https://energy-dashboard-v2.onrender.com'
 
 export default function App() {
@@ -32,7 +32,6 @@ export default function App() {
   const wallet = useWallet()
   const { data: settlementData, refetch: refetchSettlements } = useSettlements()
 
-  // 🔥 [핵심 1] 내가 검색한 지갑이 "현재 로그인된 내 지갑"인지 확인하는 로직
   const isMyWallet = Boolean(
     wallet.isConnected && 
     wallet.address && 
@@ -40,7 +39,6 @@ export default function App() {
     wallet.address.toLowerCase() === customSupplierWallet.toLowerCase()
   )
 
-  // 🔥 [핵심 2] 검색된 지갑의 단가를 백엔드(호가창 DB)에서 실시간으로 불러오기
   useEffect(() => {
     const trimmed = customSupplierWallet.trim()
     if (/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
@@ -55,7 +53,6 @@ export default function App() {
     }
   }, [customSupplierWallet])
 
-  // 🔥 [핵심 3] 내 지갑일 경우, 내가 입력한 단가를 백엔드에 저장하기
   const handleSavePrice = async () => {
     try {
       await fetch(`${BACKEND_URL}/api/supplier/price`, {
@@ -63,21 +60,22 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet: wallet.address, price: customSupplierRate })
       })
-      alert(`🎉 성공!\n내 발전소 단가가 [ ${customSupplierRate} WON/kWh ] 로 호가창에 등록되었습니다.\n이제 다른 사용자가 내 지갑을 검색하면 이 가격으로 자동 결제됩니다.`)
+      // 🔥 [단어 수정 완료] '호가창' 삭제, '단가 등록'으로 변경
+      alert(`🎉 성공!\n내 발전소 단가가 [ ${customSupplierRate} WON/kWh ] 로 정상 등록되었습니다.\n이제 다른 사용자가 내 지갑을 검색하면 이 가격으로 자동 결제됩니다.`)
     } catch (err) {
       alert('단가 등록에 실패했습니다. 백엔드 연결 상태를 확인해주세요.')
     }
   }
 
-  // 동적 공급자 객체 (일반 모드 vs 호가창 모드)
   const supplier: EnergySupplier = isCustomMode
     ? {
         id: 'custom',
-        label: isMyWallet ? '내 발전소 (호가 등록 모드)' : '신규 무허가 공급자 (P2P)',
+        // 🔥 [단어 수정 완료] '호가 등록 모드' -> '단가 설정 모드'
+        label: isMyWallet ? '내 발전소 (단가 설정 모드)' : '신규 무허가 공급자 (P2P)',
         emoji: isMyWallet ? '👑' : '🤝',
         rate: Number(customSupplierRate) || 0,
         wallet: customSupplierWallet || '0x0000000000000000000000000000000000000000',
-        description: isMyWallet ? '시장에 판매할 에너지가격을 설정하세요' : '공급자가 설정한 단가로 자동 정산됩니다'
+        description: isMyWallet ? '시장에 판매할 에너지 단가를 설정하세요' : '공급자가 설정한 단가로 자동 정산됩니다'
       }
     : SUPPLIERS[supplierId]
 
@@ -140,7 +138,7 @@ export default function App() {
           </div>
         </form>
 
-        {/* 에너지 공급자 선택 (프리셋 + P2P 호가창) */}
+        {/* 에너지 공급자 선택 (프리셋 + P2P 직거래) */}
         <div className="flex flex-col gap-2 mb-4">
           <div className="flex flex-col md:flex-row gap-2">
             {Object.values(SUPPLIERS).map((s) => (
@@ -153,17 +151,17 @@ export default function App() {
               </button>
             ))}
             
-            {/* 🔥 신규: P2P 검색 버튼 */}
+            {/* 🔥 [단어 수정 완료] '호가창' -> '1:1 직거래' */}
             <button onClick={() => setIsCustomMode(true)} className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-left transition-all ${isCustomMode ? 'border-brand-100 bg-brand-10/50 ring-1 ring-brand-100' : 'border-border-strong bg-bg-base-opaque hover:bg-bg-subtle'}`}>
               <span className="text-xl">🤝</span>
               <div className="min-w-0">
-                <div className={`text-sm font-semibold ${isCustomMode ? 'text-brand-100' : 'text-fg-base'}`}>P2P 공급자 검색 (호가창)</div>
+                <div className={`text-sm font-semibold ${isCustomMode ? 'text-brand-100' : 'text-fg-base'}`}>P2P 1:1 직거래 (지갑 검색)</div>
                 <div className="text-[10px] text-fg-muted">지갑 주소로 생산자 단가 실시간 조회</div>
               </div>
             </button>
           </div>
 
-          {/* 🔥 P2P 호가창 세부 입력 폼 */}
+          {/* P2P 직거래 세부 입력 폼 */}
           {isCustomMode && (
             <div className={`flex flex-col sm:flex-row gap-2 p-3 border rounded-lg animate-in fade-in slide-in-from-top-2 mt-1 transition-colors ${isMyWallet ? 'border-brand-100/60 bg-brand-10/20' : 'border-brand-100/30 bg-brand-10/10'}`}>
               <div className="flex-1 relative">
@@ -183,7 +181,7 @@ export default function App() {
                     type="number" 
                     value={customSupplierRate === '' ? '' : customSupplierRate} 
                     onChange={(e) => setCustomSupplierRate(e.target.value === '' ? '' : Number(e.target.value))} 
-                    disabled={!isMyWallet} // 🔥 핵심: 내 지갑이 아니면 입력창 완전 잠금 처리!
+                    disabled={!isMyWallet} 
                     placeholder={isFetchingPrice ? "조회 중..." : "단가"} 
                     className={`w-full pl-3 pr-10 py-2 text-sm font-bold bg-bg-base border rounded-md text-fg-base focus:outline-none transition-all ${isMyWallet ? 'border-brand-100/50 focus:border-brand-100 text-brand-100' : 'border-border-strong opacity-70 bg-bg-subtle cursor-not-allowed'}`} 
                   />
