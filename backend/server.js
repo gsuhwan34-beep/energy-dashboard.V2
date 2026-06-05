@@ -61,7 +61,14 @@ app.get('/api/energy', async (req, res) => {
       };
     });
 
-    readings.sort((a, b) => a.timestamp - b.timestamp);
+    // 🔥 [핵심 수정 완료] 기존의 단순 시간(timestamp) 정렬을 폐기하고,
+    // 블록체인 노드가 논스(Nonce) 순서대로 기록한 '블록 번호'와 '로그 인덱스'를 기준으로 완벽 정렬합니다.
+    readings.sort((a, b) => {
+      if (a.blockNumber !== b.blockNumber) {
+        return a.blockNumber - b.blockNumber; // 1순위: 블록 번호가 다르면 먼저 생성된 블록부터
+      }
+      return a.logIndex - b.logIndex; // 2순위: 10개가 같은 블록에 담겼다면 내부 논스 순서(logIndex)대로 정렬
+    });
 
     totalWh = Number(totalWh.toFixed(4));
     const currentBlock = await provider.getBlockNumber();
@@ -76,7 +83,6 @@ app.get('/api/energy', async (req, res) => {
         totalReadings: readings.length,
         totalWh: totalWh,
         totalKWh: totalWh / 1000,
-        // 🔥 [수정 완료] 무조건 내림(Math.floor)하던 것을 없애고 소수점 3자리까지 보존합니다!
         estimatedCostKRW: Number(((totalWh / 1000) * 150).toFixed(3)),
         totalGasUsed: 0,
         totalGasCostGwei: 0,
@@ -98,7 +104,7 @@ app.get('/api/energy/settlements', async (req, res) => {
   try {
     const suppliers = [
       '0xf7486A72851c1054661e9E6bF96f1ACcb1f7b6F8', 
-      '0x0C6F6f9FA1BB851AeF9e08c57E4E2a9820858D8e' // 새로 주신 일반 혼합 지갑 주소
+      '0x0C6F6f9FA1BB851AeF9e08c57E4E2a9820858D8e'
     ];
 
     let allTransfers = [];
@@ -107,7 +113,6 @@ app.get('/api/energy/settlements', async (req, res) => {
       const logs = await wonContract.queryFilter(filter, START_BLOCK, 'latest');
       
       const transfers = logs
-        // 🔥 토큰 발행(Mint) 기록 등 발신자가 없는(ZeroAddress) 트랜잭션 완벽 차단!
         .filter(log => log.args[0] !== ethers.ZeroAddress) 
         .map(log => ({
           txHash: log.transactionHash,
