@@ -23,13 +23,16 @@ async function rpc(method, params = []) {
 // ──────────────────────────────────────────────
 // Fetch all energy logs from chain for a wallet
 // ──────────────────────────────────────────────
+
 const cache = {}
 const CACHE_TTL = 15_000
 
 async function fetchEnergyLogs(walletAddress) {
   const key = walletAddress.toLowerCase()
   const now = Date.now()
-  if (cache[key] && now - cache[key].time < CACHE_TTL) return cache[key].data
+  if (cache[key] && now - cache[key].time < CACHE_TTL) {
+    return cache[key].data
+  }
 
   const addrPadded = '0x000000000000000000000000' + walletAddress.slice(2).toLowerCase()
   const latestHex = await rpc('eth_blockNumber')
@@ -52,7 +55,9 @@ async function fetchEnergyLogs(walletAddress) {
     const timestamp = parseInt(data.slice(64, 128), 16)
     const blockNumber = parseInt(log.blockNumber, 16)
 
-    const wh = timestamp >= MWH_CUTOFF ? +(rawValue / 1000).toFixed(3) : rawValue
+    const wh = timestamp >= MWH_CUTOFF
+      ? +(rawValue / 1000).toFixed(3)
+      : rawValue
 
     readings.push({
       txHash: log.transactionHash,
@@ -69,6 +74,7 @@ async function fetchEnergyLogs(walletAddress) {
 
   const uniqueTxHashes = [...new Set(readings.map(r => r.txHash))]
   const txDetails = {}
+
   await Promise.all(uniqueTxHashes.map(async (hash) => {
     try {
       const receipt = await rpc('eth_getTransactionReceipt', [hash])
@@ -84,6 +90,7 @@ async function fetchEnergyLogs(walletAddress) {
 
   const uniqueBlocks = [...new Set(readings.map(r => r.blockNumber))]
   const blockTimes = {}
+  
   await Promise.all(uniqueBlocks.map(async (bn) => {
     try {
       const block = await rpc('eth_getBlockByNumber', ['0x' + bn.toString(16), false])
@@ -149,7 +156,10 @@ router.get('/', async (req, res) => {
 
 router.get('/network', async (req, res) => {
   try {
-    const [blockHex, chainIdHex] = await Promise.all([ rpc('eth_blockNumber'), rpc('eth_chainId') ])
+    const [blockHex, chainIdHex] = await Promise.all([
+      rpc('eth_blockNumber'),
+      rpc('eth_chainId'),
+    ])
     res.json({
       network: 'Arbitrum Sepolia',
       chainId: parseInt(chainIdHex, 16),
@@ -172,22 +182,22 @@ router.get('/network', async (req, res) => {
 })
 
 // ──────────────────────────────────────────────
-// WON 토큰 정산 기록 조회 (🔥 P2P 대응: "내가 보낸" 모든 내역 조회)
+// WON 토큰 정산 기록 조회 (P2P 대응: 발신자 기준 조회)
 // ──────────────────────────────────────────────
+
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const WON_TOKEN = '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB'
 
 async function fetchTransfersFromWallet(consumerWallet, latestBlock) {
-  // 1. '누가 보냈는지(from)'를 기준으로 검색하기 위해 패딩 처리
+  // '누가 보냈는지(from)'를 기준으로 검색 (토픽 1)
   const fromPadded = '0x000000000000000000000000' + consumerWallet.slice(2).toLowerCase()
   const fromBlock = Math.max(0, latestBlock - 10_000_000)
 
-  // 2. from 주소가 일치하는 트랜잭션만 긁어옴 (상대방 P2P 지갑이 누구든 상관없음!)
   const logs = await rpc('eth_getLogs', [{
     address: WON_TOKEN,
     fromBlock: '0x' + fromBlock.toString(16),
     toBlock: 'latest',
-    topics: [TRANSFER_TOPIC, fromPadded], 
+    topics: [TRANSFER_TOPIC, fromPadded],
   }])
 
   const transfers = []
@@ -196,7 +206,7 @@ async function fetchTransfersFromWallet(consumerWallet, latestBlock) {
     const valueWei = BigInt('0x' + valueHex)
     const blockNumber = parseInt(log.blockNumber, 16)
     
-    // 3. 수신자(to) 주소는 세 번째 토픽에서 추출
+    // 수신자(to) 주소는 세 번째 토픽에서 추출
     const toAddr = '0x' + log.topics[2].slice(26)
 
     let timestamp = 0
@@ -229,7 +239,7 @@ router.get('/settlements', async (req, res) => {
     const latestHex = await rpc('eth_blockNumber')
     const latestBlock = parseInt(latestHex, 16)
 
-    // 4. 해당 사용자가 지불한 모든 P2P 정산 내역 가져오기
+    // 해당 사용자가 지불한 모든 정산 내역 가져오기
     const transfers = await fetchTransfersFromWallet(wallet, latestBlock)
     
     res.json({ wonToken: WON_TOKEN, transfers })
