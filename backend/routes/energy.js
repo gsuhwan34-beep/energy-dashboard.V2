@@ -55,9 +55,7 @@ async function fetchEnergyLogs(walletAddress) {
     const timestamp = parseInt(data.slice(64, 128), 16)
     const blockNumber = parseInt(log.blockNumber, 16)
 
-    const wh = timestamp >= MWH_CUTOFF
-      ? +(rawValue / 1000).toFixed(3)
-      : rawValue
+    const wh = timestamp >= MWH_CUTOFF ? +(rawValue / 1000).toFixed(3) : rawValue
 
     readings.push({
       txHash: log.transactionHash,
@@ -189,7 +187,6 @@ const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
 const WON_TOKEN = '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB'
 
 async function fetchTransfersFromWallet(consumerWallet, latestBlock) {
-  // '누가 보냈는지(from)'를 기준으로 검색 (토픽 1)
   const fromPadded = '0x000000000000000000000000' + consumerWallet.slice(2).toLowerCase()
   const fromBlock = Math.max(0, latestBlock - 10_000_000)
 
@@ -205,15 +202,17 @@ async function fetchTransfersFromWallet(consumerWallet, latestBlock) {
     const valueHex = log.data.slice(2)
     const valueWei = BigInt('0x' + valueHex)
     const blockNumber = parseInt(log.blockNumber, 16)
-    
-    // 수신자(to) 주소는 세 번째 토픽에서 추출
     const toAddr = '0x' + log.topics[2].slice(26)
 
-    let timestamp = 0
+    // 🔥 핵심 픽스: 무료 서버가 요청을 팅겨내서 1970년으로 기록되는 버그 방지
+    // 블록 시간을 못 가져오면 0이 아니라 무조건 '현재 시간'으로 기록되게 세팅
+    let timestamp = Math.floor(Date.now() / 1000)
     try {
       const block = await rpc('eth_getBlockByNumber', [log.blockNumber, false])
-      if (block) timestamp = parseInt(block.timestamp, 16)
-    } catch { /* ignore */ }
+      if (block && block.timestamp) {
+        timestamp = parseInt(block.timestamp, 16)
+      }
+    } catch { /* 에러 나면 위에서 세팅한 '현재 시간'이 그대로 들어감 */ }
 
     transfers.push({
       txHash: log.transactionHash,
@@ -228,7 +227,6 @@ async function fetchTransfersFromWallet(consumerWallet, latestBlock) {
   return transfers.sort((a, b) => a.timestamp - b.timestamp)
 }
 
-// GET /api/energy/settlements?wallet=0x...
 router.get('/settlements', async (req, res) => {
   try {
     const wallet = req.query.wallet
@@ -239,7 +237,6 @@ router.get('/settlements', async (req, res) => {
     const latestHex = await rpc('eth_blockNumber')
     const latestBlock = parseInt(latestHex, 16)
 
-    // 해당 사용자가 지불한 모든 정산 내역 가져오기
     const transfers = await fetchTransfersFromWallet(wallet, latestBlock)
     
     res.json({ wonToken: WON_TOKEN, transfers })
