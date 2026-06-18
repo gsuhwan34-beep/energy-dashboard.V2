@@ -27,19 +27,32 @@ export default function App() {
   const [customSupplierRate, setCustomSupplierRate] = useState<number | ''>(150)
   const [isFetchingPrice, setIsFetchingPrice] = useState(false)
 
-  const { data, loading, error, refetch } = useEnergyData(activeWallet)
-  const { network } = useNetworkStatus()
   const wallet = useWallet()
-  
-  // 🔥 [수정 완료] 여기에 wallet.address를 넣어서 내 지갑에서 나간 정산 기록만 완벽하게 가져옵니다!
-  const { data: settlementData, refetch: refetchSettlements } = useSettlements(wallet.address)
 
+  // 🔥 [에러 방지 픽스] supplier 변수를 훅(useSettlements) 위로 끌어올려서 먼저 계산합니다.
   const isMyWallet = Boolean(
     wallet.isConnected && 
     wallet.address && 
     customSupplierWallet && 
     wallet.address.toLowerCase() === customSupplierWallet.toLowerCase()
   )
+
+  const supplier: EnergySupplier = isCustomMode
+    ? {
+        id: 'custom',
+        label: isMyWallet ? '내 발전소 (단가 설정 모드)' : '신규 무허가 공급자 (P2P)',
+        emoji: isMyWallet ? '👑' : '🤝',
+        rate: Number(customSupplierRate) || 0,
+        wallet: customSupplierWallet || '0x0000000000000000000000000000000000000000',
+        description: isMyWallet ? '시장에 판매할 에너지 단가를 설정하세요' : '공급자가 설정한 단가로 자동 정산됩니다'
+      }
+    : SUPPLIERS[supplierId]
+
+  const { data, loading, error, refetch } = useEnergyData(activeWallet)
+  const { network } = useNetworkStatus()
+  
+  // 🔥 [최종 로직 픽스] 이제 완벽하게 계산된 공급자 지갑(supplier.wallet)을 훅에 던져줍니다.
+  const { data: settlementData, refetch: refetchSettlements } = useSettlements(supplier.wallet)
 
   useEffect(() => {
     const trimmed = customSupplierWallet.trim()
@@ -67,17 +80,6 @@ export default function App() {
       alert('단가 등록에 실패했습니다. 백엔드 연결 상태를 확인해주세요.')
     }
   }
-
-  const supplier: EnergySupplier = isCustomMode
-    ? {
-        id: 'custom',
-        label: isMyWallet ? '내 발전소 (단가 설정 모드)' : '신규 무허가 공급자 (P2P)',
-        emoji: isMyWallet ? '👑' : '🤝',
-        rate: Number(customSupplierRate) || 0,
-        wallet: customSupplierWallet || '0x0000000000000000000000000000000000000000',
-        description: isMyWallet ? '시장에 판매할 에너지 단가를 설정하세요' : '공급자가 설정한 단가로 자동 정산됩니다'
-      }
-    : SUPPLIERS[supplierId]
 
   const overview = data?.overview ?? null
   const readings = data?.readings ?? []
