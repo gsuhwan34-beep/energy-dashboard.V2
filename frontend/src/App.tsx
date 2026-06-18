@@ -13,7 +13,7 @@ import { Zap, RefreshCw, Search, AlertCircle, Save } from 'lucide-react'
 
 const DEFAULT_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
 
-// 🚨 [필수 확인] 여기에 대표님의 실제 Render 백엔드 주소를 넣어주세요! 
+// 🚨 [필수 확인] 여기에 실제 Render 백엔드 주소
 const BACKEND_URL = 'https://energy-dashboard-v2.onrender.com'
 
 export default function App() {
@@ -30,7 +30,9 @@ export default function App() {
   const { data, loading, error, refetch } = useEnergyData(activeWallet)
   const { network } = useNetworkStatus()
   const wallet = useWallet()
-  const { data: settlementData, refetch: refetchSettlements } = useSettlements()
+  
+  // 🔥 [수정 완료] 여기에 wallet.address를 넣어서 내 지갑에서 나간 정산 기록만 완벽하게 가져옵니다!
+  const { data: settlementData, refetch: refetchSettlements } = useSettlements(wallet.address)
 
   const isMyWallet = Boolean(
     wallet.isConnected && 
@@ -60,7 +62,6 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet: wallet.address, price: customSupplierRate })
       })
-      // 🔥 [단어 수정 완료] '호가창' 삭제, '단가 등록'으로 변경
       alert(`🎉 성공!\n내 발전소 단가가 [ ${customSupplierRate} WON/kWh ] 로 정상 등록되었습니다.\n이제 다른 사용자가 내 지갑을 검색하면 이 가격으로 자동 결제됩니다.`)
     } catch (err) {
       alert('단가 등록에 실패했습니다. 백엔드 연결 상태를 확인해주세요.')
@@ -70,7 +71,6 @@ export default function App() {
   const supplier: EnergySupplier = isCustomMode
     ? {
         id: 'custom',
-        // 🔥 [단어 수정 완료] '호가 등록 모드' -> '단가 설정 모드'
         label: isMyWallet ? '내 발전소 (단가 설정 모드)' : '신규 무허가 공급자 (P2P)',
         emoji: isMyWallet ? '👑' : '🤝',
         rate: Number(customSupplierRate) || 0,
@@ -151,7 +151,6 @@ export default function App() {
               </button>
             ))}
             
-            {/* 🔥 [단어 수정 완료] '호가창' -> '1:1 직거래' */}
             <button onClick={() => setIsCustomMode(true)} className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-left transition-all ${isCustomMode ? 'border-brand-100 bg-brand-10/50 ring-1 ring-brand-100' : 'border-border-strong bg-bg-base-opaque hover:bg-bg-subtle'}`}>
               <span className="text-xl">🤝</span>
               <div className="min-w-0">
