@@ -100,20 +100,20 @@ export interface SettlementTransfer {
 }
 
 export interface SettlementResponse {
-  suppliers: string[]
   wonToken: string
   transfers: SettlementTransfer[]
 }
 
-// 공급자 지갑으로 들어온 모든 WON 전송 내역 조회 (지갑 무관)
-export function useSettlements() {
+// 현재 지갑에서 나간 모든 WON 전송 내역 조회 (P2P 정산 확인용)
+export function useSettlements(wallet: string | null) {
   const [data, setData] = useState<SettlementResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
   const refetch = useCallback(async () => {
+    if (!wallet) return
     try {
       setLoading(true)
-      const res = await fetch(api('energy/settlements'))
+      const res = await fetch(api(`energy/settlements?wallet=${wallet}`))
       if (!res.ok) return
       const json = await res.json()
       setData(json)
@@ -122,7 +122,7 @@ export function useSettlements() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [wallet])
 
   useEffect(() => {
     refetch()
