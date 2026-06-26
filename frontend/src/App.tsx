@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useEnergyData, useNetworkStatus, useSettlements } from './hooks/useEnergyData'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useEnergyData, useNetworkStatus, useConsumerSettlements } from './hooks/useEnergyData'
 import { useWallet, SUPPLIERS } from './hooks/useWallet'
 import type { EnergySupplier } from './hooks/useWallet'
 import StatCard from './components/StatCard'
@@ -74,11 +74,14 @@ export default function App() {
   const { data, loading, error, refetch } = useEnergyData(activeWallet)
   const { network } = useNetworkStatus()
 
-  const settlementConsumer = wallet.address || activeWallet
-  const { data: settlementData, refetch: refetchSettlements } = useSettlements(
-    /^0x[a-fA-F0-9]{40}$/.test(supplier.wallet) ? supplier.wallet : undefined,
-    settlementConsumer,
-  )
+  const payerWallets = useMemo(() => {
+    const set = new Set<string>()
+    if (/^0x[a-fA-F0-9]{40}$/.test(activeWallet)) set.add(activeWallet)
+    if (wallet.address && /^0x[a-fA-F0-9]{40}$/.test(wallet.address)) set.add(wallet.address)
+    return Array.from(set)
+  }, [activeWallet, wallet.address])
+
+  const { data: settlementData, refetch: refetchSettlements } = useConsumerSettlements(payerWallets)
 
   const fetchSupplierPrice = useCallback(async (walletAddress: string, forOwnWallet = false) => {
     const normalized = walletAddress.toLowerCase()
@@ -298,7 +301,7 @@ export default function App() {
                 settlements={settlementData?.transfers ?? []}
                 isWalletConnected={wallet.isConnected && wallet.isCorrectNetwork}
                 supplier={supplier}
-                consumerWallet={settlementConsumer}
+                payerWallets={payerWallets}
                 onTransfer={wallet.transferWon}
                 onSettlementDone={refetchSettlements}
               />
