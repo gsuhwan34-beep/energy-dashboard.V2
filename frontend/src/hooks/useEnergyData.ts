@@ -104,32 +104,44 @@ export interface SettlementResponse {
   transfers: SettlementTransfer[]
 }
 
-// 🔥 [수정 완료] 수신자(공급자) 기준으로 정산 내역을 조회하도록 파라미터 변경
-export function useSettlements(
-  supplierWallet: string | undefined,
-  consumerWallet?: string | undefined,
-) {
+// 구매자(계량기/결제) 지갑 기준 정산 조회 — 선택한 공급자 탭과 무관
+export function useConsumerSettlements(payerWallets: string[]) {
   const [data, setData] = useState<SettlementResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
+  const walletKey = payerWallets
+    .filter(w => /^0x[a-fA-F0-9]{40}$/.test(w))
+    .map(w => w.toLowerCase())
+    .sort()
+    .join(',')
+
   const refetch = useCallback(async () => {
-    if (!supplierWallet || !/^0x[a-fA-F0-9]{40}$/.test(supplierWallet)) return
+    const wallets = walletKey.split(',').filter(Boolean)
+    if (!wallets.length) return
     try {
       setLoading(true)
-      const params = new URLSearchParams({ supplier: supplierWallet })
-      if (consumerWallet && /^0x[a-fA-F0-9]{40}$/.test(consumerWallet)) {
-        params.set('consumer', consumerWallet)
+      const results = await Promise.all(
+        wallets.map(async (wallet) => {
+          const res = await fetch(api(`energy/settlements?consumer=${wallet}`))
+          if (!res.ok) return [] as SettlementTransfer[]
+          const json = await res.json()
+          return (json.transfers ?? []) as SettlementTransfer[]
+        }),
+      )
+
+      const merged = new Map<string, SettlementTransfer>()
+      for (const list of results) {
+        for (const t of list) merged.set(t.txHash, t)
       }
-      const res = await fetch(api(`energy/settlements?${params.toString()}`))
-      if (!res.ok) return
-      const json = await res.json()
-      setData(json)
+      const transfers = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp)
+
+      setData({ wonToken: '', transfers })
     } catch {
       // ignore
     } finally {
       setLoading(false)
     }
-  }, [supplierWallet, consumerWallet])
+  }, [walletKey])
 
   useEffect(() => {
     refetch()
