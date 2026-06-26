@@ -25,6 +25,9 @@ export interface EnergySupplier {
   description: string
 }
 
+/** 프리셋 공급자 단가 — 정산 매칭 시 탭 선택과 무관하게 사용 */
+export const PRESET_SETTLEMENT_RATES = [150, 100] as const
+
 export const SUPPLIERS: Record<string, EnergySupplier> = {
   renewable: {
     id: 'renewable',
