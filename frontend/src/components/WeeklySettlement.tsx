@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import type { EnergyReading, SettlementTransfer } from '../hooks/useEnergyData'
 import type { EnergySupplier } from '../hooks/useWallet'
+import { PRESET_SETTLEMENT_RATES } from '../hooks/useWallet'
 import {
   Calendar, Coins, CheckCircle2, Loader2,
   AlertCircle, ChevronLeft, ChevronRight, Clock,
@@ -24,7 +25,7 @@ interface Props {
   settlements: SettlementTransfer[]
   isWalletConnected: boolean
   supplier: EnergySupplier
-  consumerWallet?: string
+  payerWallets?: string[]
   onTransfer: (amountKwh: number, supplierWallet: string, rate: number) => Promise<string>
   onSettlementDone: () => void
 }
@@ -83,9 +84,7 @@ function getAvailableMonths(readings: EnergyReading[]): { year: number; month: n
 
 /**
  * 온체인 WON 전송 기록을 주차별로 매칭.
- * - 공급자(to), 구매자(from) 주소 일치
- * - 금액이 해당 주차 요금과 근사하게 일치
- * - 전송 시각이 해당 주차 시작 이후
+ * 공급자 탭과 무관 — 구매자 지갑 + kWh 기반 금액으로 판별.
  */
 function amountsMatch(expected: number, actual: number): boolean {
   if (expected <= 0) return actual <= 0.01
@@ -93,23 +92,37 @@ function amountsMatch(expected: number, actual: number): boolean {
   return diff <= Math.max(0.01, expected * 0.05)
 }
 
+function paymentMatchesWeekEnergy(
+  week: WeekRow,
+  transfer: SettlementTransfer,
+  extraRates: number[],
+): boolean {
+  if (week.isEmpty && week.totalKWh <= 0) return transfer.wonAmount <= 0.01
+  if (week.totalKWh <= 0) return false
+
+  const rates = [...new Set([...PRESET_SETTLEMENT_RATES, ...extraRates.filter(r => r > 0)])]
+  for (const rate of rates) {
+    if (amountsMatch(week.totalKWh * rate, transfer.wonAmount)) return true
+  }
+
+  const impliedRate = transfer.wonAmount / week.totalKWh
+  if (impliedRate >= 10 && impliedRate <= 500) {
+    return amountsMatch(week.totalKWh * impliedRate, transfer.wonAmount)
+  }
+  return false
+}
+
 function matchSettlementsToWeeks(
   weeks: WeekRow[],
   settlements: SettlementTransfer[],
-  supplierWallet: string,
-  consumerWallet?: string,
+  payerWallets: string[],
+  extraRates: number[],
 ): Record<number, { txHash: string; wonAmount: number; to: string }> {
   const matched: Record<number, { txHash: string; wonAmount: number; to: string }> = {}
-  if (!settlements.length || !/^0x[a-fA-F0-9]{40}$/.test(supplierWallet)) return matched
+  if (!settlements.length || !payerWallets.length) return matched
 
-  const supplierLower = supplierWallet.toLowerCase()
-  const consumerLower = consumerWallet?.toLowerCase()
-
-  const eligible = settlements.filter((s) => {
-    if (s.to.toLowerCase() !== supplierLower) return false
-    if (consumerLower && s.from.toLowerCase() !== consumerLower) return false
-    return true
-  })
+  const payerSet = new Set(payerWallets.map(w => w.toLowerCase()))
+  const eligible = settlements.filter(s => payerSet.has(s.from.toLowerCase()))
 
   const weeksSorted = [...weeks]
     .filter(w => !w.isCurrent)
@@ -129,7 +142,7 @@ function matchSettlementsToWeeks(
     for (const s of eligible) {
       if (usedTx.has(s.txHash)) continue
       if (s.timestamp < weekStartTs) continue
-      if (!amountsMatch(week.wonAmount, s.wonAmount)) continue
+      if (!paymentMatchesWeekEnergy(week, s, extraRates)) continue
 
       const score = Math.abs(s.timestamp - weekEndTs)
       if (score < bestScore) {
@@ -152,7 +165,7 @@ function matchSettlementsToWeeks(
 }
 
 export default function WeeklySettlement({
-  readings, settlements, isWalletConnected, supplier, consumerWallet, onTransfer, onSettlementDone,
+  readings, settlements, isWalletConnected, supplier, payerWallets = [], onTransfer, onSettlementDone,
 }: Props) {
   const [justSettled, setJustSettled] = useState<Record<number, string>>({})
   const [settling, setSettling] = useState<number | null>(null)
@@ -201,8 +214,8 @@ export default function WeeklySettlement({
   }, [selectedMonth, readingsByWeek, currentWeekIndex, supplier.rate])
 
   const onchainSettled = useMemo(
-    () => matchSettlementsToWeeks(weeks, settlements, supplier.wallet, consumerWallet),
-    [weeks, settlements, supplier.wallet, consumerWallet],
+    () => matchSettlementsToWeeks(weeks, settlements, payerWallets, [supplier.rate]),
+    [weeks, settlements, payerWallets, supplier.rate],
   )
 
   async function handleSettle(week: WeekRow) {
