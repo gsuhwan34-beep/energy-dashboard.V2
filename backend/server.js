@@ -119,46 +119,63 @@ app.get('/api/energy', async (req, res) => {
 
 // ----------------------------------------------------
 // 2. 주간 정산 내역 API
-// ?supplier=0x... (필수) — 정산 수신 공급자
-// ?consumer=0x... (선택) — 정산 송신자(구매자/계량기 지갑) 필터
+// ?consumer=0x... — 구매자(송신) 지갑 기준 조회 (공급자 탭 무관, 권장)
+// ?supplier=0x... — 공급자(수신) 지갑 필터 (선택)
 // ----------------------------------------------------
 app.get('/api/energy/settlements', async (req, res) => {
   try {
     const supplierParam = req.query.supplier;
     const consumerParam = req.query.consumer;
 
-    const suppliers = isValidAddress(supplierParam)
-      ? [ethers.getAddress(supplierParam)]
-      : DEFAULT_SUPPLIERS;
-
     let allTransfers = [];
-    for (const supplier of suppliers) {
-      const filter = wonContract.filters.Transfer(null, supplier);
-      const logs = await wonContract.queryFilter(filter, START_BLOCK, 'latest');
+    const seenTx = new Set();
 
-      for (const log of logs) {
-        if (log.args[0] === ethers.ZeroAddress) continue;
+    async function pushTransfer(log) {
+      if (log.args[0] === ethers.ZeroAddress) return;
+      const txHash = log.transactionHash;
+      if (seenTx.has(txHash)) return;
+      seenTx.add(txHash);
 
-        const from = ethers.getAddress(log.args[0]);
-        if (isValidAddress(consumerParam) && from.toLowerCase() !== consumerParam.toLowerCase()) {
+      allTransfers.push({
+        txHash,
+        blockNumber: log.blockNumber,
+        timestamp: await getBlockTimestamp(log.blockNumber),
+        from: ethers.getAddress(log.args[0]),
+        to: ethers.getAddress(log.args[1]),
+        wonAmount: Number(ethers.formatUnits(log.args[2], 18)),
+      });
+    }
+
+    // consumer만 있으면: 해당 지갑이 보낸 모든 WON 정산 조회 (공급자 탭과 무관)
+    if (isValidAddress(consumerParam)) {
+      const consumer = ethers.getAddress(consumerParam);
+      const fromFilter = wonContract.filters.Transfer(consumer, null);
+      const fromLogs = await wonContract.queryFilter(fromFilter, START_BLOCK, 'latest');
+
+      for (const log of fromLogs) {
+        if (isValidAddress(supplierParam) &&
+            ethers.getAddress(log.args[1]).toLowerCase() !== supplierParam.toLowerCase()) {
           continue;
         }
+        await pushTransfer(log);
+      }
+    } else {
+      const suppliers = isValidAddress(supplierParam)
+        ? [ethers.getAddress(supplierParam)]
+        : DEFAULT_SUPPLIERS;
 
-        allTransfers.push({
-          txHash: log.transactionHash,
-          blockNumber: log.blockNumber,
-          timestamp: await getBlockTimestamp(log.blockNumber),
-          from,
-          to: ethers.getAddress(log.args[1]),
-          wonAmount: Number(ethers.formatUnits(log.args[2], 18)),
-        });
+      for (const supplier of suppliers) {
+        const filter = wonContract.filters.Transfer(null, supplier);
+        const logs = await wonContract.queryFilter(filter, START_BLOCK, 'latest');
+        for (const log of logs) {
+          await pushTransfer(log);
+        }
       }
     }
 
     allTransfers.sort((a, b) => a.timestamp - b.timestamp);
 
     res.json({
-      suppliers,
       wonToken: WON_ADDRESS,
       transfers: allTransfers,
     });
