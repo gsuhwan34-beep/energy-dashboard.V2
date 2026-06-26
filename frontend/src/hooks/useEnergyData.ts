@@ -105,16 +105,22 @@ export interface SettlementResponse {
 }
 
 // 🔥 [수정 완료] 수신자(공급자) 기준으로 정산 내역을 조회하도록 파라미터 변경
-export function useSettlements(supplierWallet: string | undefined) {
+export function useSettlements(
+  supplierWallet: string | undefined,
+  consumerWallet?: string | undefined,
+) {
   const [data, setData] = useState<SettlementResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
   const refetch = useCallback(async () => {
-    if (!supplierWallet) return
+    if (!supplierWallet || !/^0x[a-fA-F0-9]{40}$/.test(supplierWallet)) return
     try {
       setLoading(true)
-      // 🔥 [수정 완료] API 요청 파라미터를 supplier로 변경
-      const res = await fetch(api(`energy/settlements?supplier=${supplierWallet}`))
+      const params = new URLSearchParams({ supplier: supplierWallet })
+      if (consumerWallet && /^0x[a-fA-F0-9]{40}$/.test(consumerWallet)) {
+        params.set('consumer', consumerWallet)
+      }
+      const res = await fetch(api(`energy/settlements?${params.toString()}`))
       if (!res.ok) return
       const json = await res.json()
       setData(json)
@@ -123,7 +129,7 @@ export function useSettlements(supplierWallet: string | undefined) {
     } finally {
       setLoading(false)
     }
-  }, [supplierWallet])
+  }, [supplierWallet, consumerWallet])
 
   useEffect(() => {
     refetch()

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useEnergyData, useNetworkStatus, useSettlements } from './hooks/useEnergyData'
 import { useWallet, SUPPLIERS } from './hooks/useWallet'
 import type { EnergySupplier } from './hooks/useWallet'
@@ -10,11 +10,32 @@ import TransactionTable from './components/TransactionTable'
 import WeeklySettlement from './components/WeeklySettlement'
 import WalletButton from './components/WalletButton'
 import { Zap, RefreshCw, Search, AlertCircle, Save } from 'lucide-react'
+import { api } from './lib/api'
 
 const DEFAULT_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
 
-// 🚨 [필수 확인] 여기에 실제 Render 백엔드 주소
-const BACKEND_URL = 'https://energy-dashboard-v2.onrender.com'
+function supplierPriceStorageKey(wallet: string) {
+  return `p2p-supplier-price:${wallet.toLowerCase()}`
+}
+
+function readStoredPrice(wallet: string): number | null {
+  try {
+    const raw = localStorage.getItem(supplierPriceStorageKey(wallet))
+    if (raw == null) return null
+    const value = Number(raw)
+    return Number.isFinite(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredPrice(wallet: string, price: number) {
+  try {
+    localStorage.setItem(supplierPriceStorageKey(wallet), String(price))
+  } catch {
+    // ignore
+  }
+}
 
 export default function App() {
   const [walletInput, setWalletInput] = useState(DEFAULT_WALLET)
@@ -26,6 +47,8 @@ export default function App() {
   const [customSupplierWallet, setCustomSupplierWallet] = useState('')
   const [customSupplierRate, setCustomSupplierRate] = useState<number | ''>(150)
   const [isFetchingPrice, setIsFetchingPrice] = useState(false)
+  const lastFetchedWalletRef = useRef<string | null>(null)
+  const priceDirtyRef = useRef(false)
 
   const wallet = useWallet()
 
@@ -50,33 +73,80 @@ export default function App() {
 
   const { data, loading, error, refetch } = useEnergyData(activeWallet)
   const { network } = useNetworkStatus()
-  
-  // 🔥 [최종 로직 픽스] 이제 완벽하게 계산된 공급자 지갑(supplier.wallet)을 훅에 던져줍니다.
-  const { data: settlementData, refetch: refetchSettlements } = useSettlements(supplier.wallet)
+
+  const settlementConsumer = wallet.address || activeWallet
+  const { data: settlementData, refetch: refetchSettlements } = useSettlements(
+    /^0x[a-fA-F0-9]{40}$/.test(supplier.wallet) ? supplier.wallet : undefined,
+    settlementConsumer,
+  )
+
+  const fetchSupplierPrice = useCallback(async (walletAddress: string, forOwnWallet = false) => {
+    const normalized = walletAddress.toLowerCase()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) return
+    if (lastFetchedWalletRef.current === normalized) return
+
+    setIsFetchingPrice(true)
+    try {
+      const res = await fetch(api(`supplier/price/${walletAddress}`))
+      if (!res.ok) throw new Error('price fetch failed')
+      const resData = await res.json()
+
+      lastFetchedWalletRef.current = normalized
+      if (!priceDirtyRef.current) {
+        setCustomSupplierRate(Number(resData.price))
+      }
+    } catch (err) {
+      console.error('단가 조회 실패:', err)
+      if (forOwnWallet) {
+        const stored = readStoredPrice(walletAddress)
+        if (stored != null && !priceDirtyRef.current) {
+          setCustomSupplierRate(stored)
+        }
+      }
+    } finally {
+      setIsFetchingPrice(false)
+    }
+  }, [])
 
   useEffect(() => {
+    if (!isCustomMode) return
     const trimmed = customSupplierWallet.trim()
-    if (/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
-      setIsFetchingPrice(true)
-      fetch(`${BACKEND_URL}/api/supplier/price/${trimmed}`)
-        .then(res => res.json())
-        .then(resData => {
-          setCustomSupplierRate(resData.price)
-        })
-        .catch(err => console.error("단가 조회 실패:", err))
-        .finally(() => setIsFetchingPrice(false))
+    if (!/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
+      lastFetchedWalletRef.current = null
+      return
     }
-  }, [customSupplierWallet])
+    if (lastFetchedWalletRef.current !== trimmed.toLowerCase()) {
+      priceDirtyRef.current = false
+    }
+    fetchSupplierPrice(trimmed, isMyWallet)
+  }, [customSupplierWallet, isCustomMode, isMyWallet, fetchSupplierPrice])
+
+  const handleSupplierWalletChange = (value: string) => {
+    const next = value.trim()
+    if (next.toLowerCase() !== (lastFetchedWalletRef.current ?? '')) {
+      priceDirtyRef.current = false
+    }
+    setCustomSupplierWallet(value)
+  }
+
+  const handleSupplierRateChange = (value: number | '') => {
+    priceDirtyRef.current = true
+    setCustomSupplierRate(value)
+  }
 
   const handleSavePrice = async () => {
+    if (!wallet.address || customSupplierRate === '') return
     try {
-      await fetch(`${BACKEND_URL}/api/supplier/price`, {
+      await fetch(api('supplier/price'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet: wallet.address, price: customSupplierRate })
+        body: JSON.stringify({ wallet: wallet.address, price: customSupplierRate }),
       })
+      writeStoredPrice(wallet.address, Number(customSupplierRate))
+      priceDirtyRef.current = false
+      lastFetchedWalletRef.current = wallet.address.toLowerCase()
       alert(`🎉 성공!\n내 발전소 단가가 [ ${customSupplierRate} WON/kWh ] 로 정상 등록되었습니다.\n이제 다른 사용자가 내 지갑을 검색하면 이 가격으로 자동 결제됩니다.`)
-    } catch (err) {
+    } catch {
       alert('단가 등록에 실패했습니다. 백엔드 연결 상태를 확인해주세요.')
     }
   }
@@ -170,7 +240,7 @@ export default function App() {
                 <input 
                   type="text" 
                   value={customSupplierWallet} 
-                  onChange={(e) => setCustomSupplierWallet(e.target.value)} 
+                  onChange={(e) => handleSupplierWalletChange(e.target.value)} 
                   placeholder="정산할 공급자의 지갑 주소 (또는 내 지갑) 입력 (0x...)" 
                   className="w-full pl-9 pr-3 py-2 text-sm font-mono bg-bg-base border border-border-strong rounded-md text-fg-base focus:outline-none focus:border-brand-100" 
                 />
@@ -181,7 +251,7 @@ export default function App() {
                   <input 
                     type="number" 
                     value={customSupplierRate === '' ? '' : customSupplierRate} 
-                    onChange={(e) => setCustomSupplierRate(e.target.value === '' ? '' : Number(e.target.value))} 
+                    onChange={(e) => handleSupplierRateChange(e.target.value === '' ? '' : Number(e.target.value))} 
                     disabled={!isMyWallet} 
                     placeholder={isFetchingPrice ? "조회 중..." : "단가"} 
                     className={`w-full pl-3 pr-10 py-2 text-sm font-bold bg-bg-base border rounded-md text-fg-base focus:outline-none transition-all ${isMyWallet ? 'border-brand-100/50 focus:border-brand-100 text-brand-100' : 'border-border-strong opacity-70 bg-bg-subtle cursor-not-allowed'}`} 
@@ -223,7 +293,15 @@ export default function App() {
             </div>
 
             <div className="mb-4">
-              <WeeklySettlement readings={readings} settlements={settlementData?.transfers ?? []} isWalletConnected={wallet.isConnected && wallet.isCorrectNetwork} supplier={supplier} onTransfer={wallet.transferWon} onSettlementDone={refetchSettlements} />
+              <WeeklySettlement
+                readings={readings}
+                settlements={settlementData?.transfers ?? []}
+                isWalletConnected={wallet.isConnected && wallet.isCorrectNetwork}
+                supplier={supplier}
+                consumerWallet={settlementConsumer}
+                onTransfer={wallet.transferWon}
+                onSettlementDone={refetchSettlements}
+              />
             </div>
             <TransactionTable readings={readings} />
           </>

@@ -45,10 +45,11 @@ async function fetchTransfersToSupplier(supplierWallet, latestBlock) {
   return transfers.sort((a, b) => a.timestamp - b.timestamp)
 }
 
-// GET /api/energy/settlements?supplier=0x...
+// GET /api/energy/settlements?supplier=0x...&consumer=0x...
 router.get('/settlements', async (req, res) => {
   try {
     const supplier = req.query.supplier
+    const consumer = req.query.consumer
     if (!supplier || !/^0x[a-fA-F0-9]{40}$/.test(supplier)) {
       return res.status(400).json({ error: 'Valid supplier address required (?supplier=0x...)' })
     }
@@ -56,9 +57,13 @@ router.get('/settlements', async (req, res) => {
     const latestHex = await rpc('eth_blockNumber')
     const latestBlock = parseInt(latestHex, 16)
 
-    // 🔥 해당 "공급자"가 받은 모든 정산 내역 가져오기
-    const transfers = await fetchTransfersToSupplier(supplier, latestBlock)
-    
+    let transfers = await fetchTransfersToSupplier(supplier, latestBlock)
+
+    if (consumer && /^0x[a-fA-F0-9]{40}$/.test(consumer)) {
+      const consumerLower = consumer.toLowerCase()
+      transfers = transfers.filter(t => t.from === consumerLower)
+    }
+
     res.json({ wonToken: WON_TOKEN, transfers })
   } catch (err) {
     res.status(500).json({ error: err.message })

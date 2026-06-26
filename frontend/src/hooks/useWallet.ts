@@ -17,7 +17,7 @@ const WON_TOKEN_ABI = ['function transfer(address to, uint amount) returns (bool
 
 // ── 에너지 공급자 설정 ──
 export interface EnergySupplier {
-  id: 'renewable' | 'mixed'
+  id: 'renewable' | 'mixed' | 'custom'
   label: string
   emoji: string
   rate: number        // WON per kWh

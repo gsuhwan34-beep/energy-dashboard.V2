@@ -28,6 +28,27 @@ const wonContract = new ethers.Contract(WON_ADDRESS, WON_ABI, provider);
 const START_BLOCK = 260000000; 
 const MAY_22_TIMESTAMP = Math.floor(new Date('2026-05-22T00:00:00+09:00').getTime() / 1000);
 
+const DEFAULT_SUPPLIERS = [
+  '0xf7486A72851c1054661e9E6bF96f1ACcb1f7b6F8',
+  '0x0C6F6f9FA1BB851AeF9e08c57E4E2a9820858D8e',
+];
+
+const blockTimestampCache = new Map();
+
+async function getBlockTimestamp(blockNumber) {
+  if (blockTimestampCache.has(blockNumber)) {
+    return blockTimestampCache.get(blockNumber);
+  }
+  const block = await provider.getBlock(blockNumber);
+  const timestamp = block ? block.timestamp : Math.floor(Date.now() / 1000);
+  blockTimestampCache.set(blockNumber, timestamp);
+  return timestamp;
+}
+
+function isValidAddress(address) {
+  return typeof address === 'string' && /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
 // ----------------------------------------------------
 // 1. 핵심 에너지 계량 데이터 API (논스 정렬 및 소수점 보존 포함)
 // ----------------------------------------------------
@@ -97,39 +118,49 @@ app.get('/api/energy', async (req, res) => {
 });
 
 // ----------------------------------------------------
-// 2. 주간 정산 내역 API 
+// 2. 주간 정산 내역 API
+// ?supplier=0x... (필수) — 정산 수신 공급자
+// ?consumer=0x... (선택) — 정산 송신자(구매자/계량기 지갑) 필터
 // ----------------------------------------------------
 app.get('/api/energy/settlements', async (req, res) => {
   try {
-    const suppliers = [
-      '0xf7486A72851c1054661e9E6bF96f1ACcb1f7b6F8', 
-      '0x0C6F6f9FA1BB851AeF9e08c57E4E2a9820858D8e'
-    ];
+    const supplierParam = req.query.supplier;
+    const consumerParam = req.query.consumer;
+
+    const suppliers = isValidAddress(supplierParam)
+      ? [ethers.getAddress(supplierParam)]
+      : DEFAULT_SUPPLIERS;
 
     let allTransfers = [];
     for (const supplier of suppliers) {
       const filter = wonContract.filters.Transfer(null, supplier);
       const logs = await wonContract.queryFilter(filter, START_BLOCK, 'latest');
-      
-      const transfers = logs
-        .filter(log => log.args[0] !== ethers.ZeroAddress) 
-        .map(log => ({
+
+      for (const log of logs) {
+        if (log.args[0] === ethers.ZeroAddress) continue;
+
+        const from = ethers.getAddress(log.args[0]);
+        if (isValidAddress(consumerParam) && from.toLowerCase() !== consumerParam.toLowerCase()) {
+          continue;
+        }
+
+        allTransfers.push({
           txHash: log.transactionHash,
           blockNumber: log.blockNumber,
-          timestamp: Math.floor(Date.now() / 1000), 
-          from: log.args[0],
-          to: log.args[1],
-          wonAmount: Number(ethers.formatUnits(log.args[2], 18))
-        }));
-      allTransfers = allTransfers.concat(transfers);
+          timestamp: await getBlockTimestamp(log.blockNumber),
+          from,
+          to: ethers.getAddress(log.args[1]),
+          wonAmount: Number(ethers.formatUnits(log.args[2], 18)),
+        });
+      }
     }
 
-    allTransfers.sort((a, b) => b.blockNumber - a.blockNumber);
+    allTransfers.sort((a, b) => a.timestamp - b.timestamp);
 
     res.json({
-      suppliers: suppliers,
+      suppliers,
       wonToken: WON_ADDRESS,
-      transfers: allTransfers
+      transfers: allTransfers,
     });
   } catch (error) {
     console.error("Settlement fetch error:", error);
@@ -138,20 +169,52 @@ app.get('/api/energy/settlements', async (req, res) => {
 });
 
 // ----------------------------------------------------
-// 🔥 [신규 추가] P2P 공급자 단가(호가) 관리 API 
+// P2P 공급자 단가(호가) 관리 API
 // ----------------------------------------------------
-const supplierPrices = {}; // 메모리 기반 호가 DB
+const fs = require('fs');
+const path = require('path');
+
+const SUPPLIER_PRICES_FILE = path.join(__dirname, 'supplier-prices.json');
+let supplierPrices = {};
+
+function loadSupplierPrices() {
+  try {
+    if (fs.existsSync(SUPPLIER_PRICES_FILE)) {
+      supplierPrices = JSON.parse(fs.readFileSync(SUPPLIER_PRICES_FILE, 'utf8'));
+    }
+  } catch (err) {
+    console.warn('Failed to load supplier prices:', err.message);
+    supplierPrices = {};
+  }
+}
+
+function saveSupplierPrices() {
+  try {
+    fs.writeFileSync(SUPPLIER_PRICES_FILE, JSON.stringify(supplierPrices, null, 2));
+  } catch (err) {
+    console.warn('Failed to save supplier prices:', err.message);
+  }
+}
+
+loadSupplierPrices();
 
 app.post('/api/supplier/price', (req, res) => {
   const { wallet, price } = req.body;
-  if (!wallet || price === undefined) return res.status(400).json({ error: 'Invalid data' });
-  supplierPrices[wallet.toLowerCase()] = Number(price);
-  res.json({ success: true, wallet, price: supplierPrices[wallet.toLowerCase()] });
+  if (!isValidAddress(wallet) || price === undefined || Number.isNaN(Number(price))) {
+    return res.status(400).json({ error: 'Invalid data' });
+  }
+  const key = wallet.toLowerCase();
+  supplierPrices[key] = Number(price);
+  saveSupplierPrices();
+  res.json({ success: true, wallet: key, price: supplierPrices[key] });
 });
 
 app.get('/api/supplier/price/:wallet', (req, res) => {
   const wallet = req.params.wallet.toLowerCase();
-  const price = supplierPrices[wallet] !== undefined ? supplierPrices[wallet] : 150; 
+  if (!isValidAddress(wallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+  const price = supplierPrices[wallet] !== undefined ? supplierPrices[wallet] : 150;
   res.json({ wallet, price });
 });
 

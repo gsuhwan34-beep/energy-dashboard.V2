@@ -24,6 +24,7 @@ interface Props {
   settlements: SettlementTransfer[]
   isWalletConnected: boolean
   supplier: EnergySupplier
+  consumerWallet?: string
   onTransfer: (amountKwh: number, supplierWallet: string, rate: number) => Promise<string>
   onSettlementDone: () => void
 }
@@ -81,40 +82,69 @@ function getAvailableMonths(readings: EnergyReading[]): { year: number; month: n
 }
 
 /**
- * 온체인 전송 기록을 주차별로 매칭.
- * 공급자 종류 무관 — 어떤 공급자든 해당 주차에 대해 WON을 보낸 기록이 있으면 정산됨.
- * 매칭 기준: 전송 타임스탬프가 해당 주차 시작 이후이면, 가장 오래된 미매칭 주차에 순차 할당.
+ * 온체인 WON 전송 기록을 주차별로 매칭.
+ * - 공급자(to), 구매자(from) 주소 일치
+ * - 금액이 해당 주차 요금과 근사하게 일치
+ * - 전송 시각이 해당 주차 시작 이후
  */
+function amountsMatch(expected: number, actual: number): boolean {
+  if (expected <= 0) return actual <= 0.01
+  const diff = Math.abs(expected - actual)
+  return diff <= Math.max(0.01, expected * 0.05)
+}
+
 function matchSettlementsToWeeks(
   weeks: WeekRow[],
   settlements: SettlementTransfer[],
+  supplierWallet: string,
+  consumerWallet?: string,
 ): Record<number, { txHash: string; wonAmount: number; to: string }> {
   const matched: Record<number, { txHash: string; wonAmount: number; to: string }> = {}
-  if (!settlements.length) return matched
+  if (!settlements.length || !/^0x[a-fA-F0-9]{40}$/.test(supplierWallet)) return matched
 
-  // 모든 공급자 지갑으로의 전송을 시간순 정렬
-  const sorted = [...settlements].sort((a, b) => a.timestamp - b.timestamp)
-  // 주차를 시간순 정렬 (오래된 것부터)
+  const supplierLower = supplierWallet.toLowerCase()
+  const consumerLower = consumerWallet?.toLowerCase()
+
+  const eligible = settlements.filter((s) => {
+    if (s.to.toLowerCase() !== supplierLower) return false
+    if (consumerLower && s.from.toLowerCase() !== consumerLower) return false
+    return true
+  })
+
   const weeksSorted = [...weeks]
     .filter(w => !w.isCurrent)
     .sort((a, b) => a.weekIndex - b.weekIndex)
 
   const usedTx = new Set<string>()
 
-  // 에너지가 있는 주차부터 순서대로, 전송 기록을 순차 매칭
   for (const week of weeksSorted) {
-    if (week.wonAmount <= 0 && week.isEmpty) continue // 빈 주차는 skip (자동 정산됨)
+    if (week.wonAmount <= 0 && week.isEmpty) continue
 
     const weekStartTs = Math.floor(week.start.getTime() / 1000)
+    const weekEndTs = Math.floor(week.end.getTime() / 1000)
 
-    for (const s of sorted) {
+    let bestMatch: SettlementTransfer | null = null
+    let bestScore = Infinity
+
+    for (const s of eligible) {
       if (usedTx.has(s.txHash)) continue
-      // 전송이 주차 시작 이후에 발생했으면 매칭
-      if (s.timestamp >= weekStartTs) {
-        matched[week.weekIndex] = { txHash: s.txHash, wonAmount: s.wonAmount, to: s.to }
-        usedTx.add(s.txHash)
-        break
+      if (s.timestamp < weekStartTs) continue
+      if (!amountsMatch(week.wonAmount, s.wonAmount)) continue
+
+      const score = Math.abs(s.timestamp - weekEndTs)
+      if (score < bestScore) {
+        bestScore = score
+        bestMatch = s
       }
+    }
+
+    if (bestMatch) {
+      matched[week.weekIndex] = {
+        txHash: bestMatch.txHash,
+        wonAmount: bestMatch.wonAmount,
+        to: bestMatch.to,
+      }
+      usedTx.add(bestMatch.txHash)
     }
   }
 
@@ -122,7 +152,7 @@ function matchSettlementsToWeeks(
 }
 
 export default function WeeklySettlement({
-  readings, settlements, isWalletConnected, supplier, onTransfer, onSettlementDone,
+  readings, settlements, isWalletConnected, supplier, consumerWallet, onTransfer, onSettlementDone,
 }: Props) {
   const [justSettled, setJustSettled] = useState<Record<number, string>>({})
   const [settling, setSettling] = useState<number | null>(null)
@@ -171,8 +201,8 @@ export default function WeeklySettlement({
   }, [selectedMonth, readingsByWeek, currentWeekIndex, supplier.rate])
 
   const onchainSettled = useMemo(
-    () => matchSettlementsToWeeks(weeks, settlements),
-    [weeks, settlements],
+    () => matchSettlementsToWeeks(weeks, settlements, supplier.wallet, consumerWallet),
+    [weeks, settlements, supplier.wallet, consumerWallet],
   )
 
   async function handleSettle(week: WeekRow) {
