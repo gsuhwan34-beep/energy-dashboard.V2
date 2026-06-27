@@ -10,7 +10,7 @@ import { Zap, AlertCircle } from 'lucide-react'
 const ROLE_SUBTITLE: Record<AppRole, string> = {
   consumer: '소비자 · 전력 사용 및 P2P 정산',
   producer: '생산자 · 전력 생산 및 판매 관리',
-  presentation: '프레젠테이션 · 대회/태블릿 전시 모드',
+  presentation: '프레젠테이션',
 }
 
 export default function App() {
@@ -46,11 +46,9 @@ export default function App() {
                 </p>
               </div>
             </div>
-            {!isPresentation && (
-              <div className="flex items-center gap-2 self-end sm:self-auto">
-                <WalletButton wallet={wallet} onConnect={wallet.connect} onDisconnect={wallet.disconnect} />
-              </div>
-            )}
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <WalletButton wallet={wallet} onConnect={wallet.connect} onDisconnect={wallet.disconnect} />
+            </div>
           </div>
 
           <RoleTabs role={role} onChange={setRole} />
@@ -64,7 +62,7 @@ export default function App() {
 
         {role === 'consumer' && <ConsumerDashboard wallet={wallet} />}
         {role === 'producer' && <ProducerDashboard wallet={wallet} />}
-        {role === 'presentation' && <PresentationDashboard />}
+        {role === 'presentation' && <PresentationDashboard wallet={wallet} />}
 
         {!isPresentation && (
           <footer className="mt-6 pt-4 border-t border-border-base flex flex-wrap items-center justify-between gap-2 text-[10px] text-fg-muted">

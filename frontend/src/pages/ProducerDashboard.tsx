@@ -9,6 +9,7 @@ import TransactionTable from '../components/TransactionTable'
 import ProducerSalesTable from '../components/ProducerSalesTable'
 import { Sun, RefreshCw, Search, AlertCircle, Save, Wallet } from 'lucide-react'
 import { api } from '../lib/api'
+import { writeStoredWallet, STORAGE_PRODUCER_WALLET } from '../lib/presentation'
 
 type WalletHook = ReturnType<typeof useWallet>
 
@@ -51,6 +52,11 @@ export default function ProducerDashboard({ wallet }: Props) {
       setActiveWallet(wallet.address)
     }
   }, [wallet.address, activeWallet])
+
+  useEffect(() => {
+    if (activeWallet) writeStoredWallet(STORAGE_PRODUCER_WALLET, activeWallet)
+    else if (wallet.address) writeStoredWallet(STORAGE_PRODUCER_WALLET, wallet.address)
+  }, [activeWallet, wallet.address])
 
   useEffect(() => {
     if (data?.ratePerKwh != null && !priceDirtyRef.current) {

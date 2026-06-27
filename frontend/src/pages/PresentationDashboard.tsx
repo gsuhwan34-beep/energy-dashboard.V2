@@ -1,248 +1,184 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useEnergyData, useNetworkStatus } from '../hooks/useEnergyData'
+import { useEnergyData, useConsumerSettlements } from '../hooks/useEnergyData'
 import { useProducerData } from '../hooks/useProducerData'
-import { DEMO_CONSUMER_WALLET, DEMO_PRODUCER_WALLET, buildChainEvents } from '../lib/presentation'
-import SystemFlowBanner from '../components/presentation/SystemFlowBanner'
-import EnergyHeatmap from '../components/presentation/EnergyHeatmap'
-import OnChainLiveFeed from '../components/presentation/OnChainLiveFeed'
-import ProducerInventoryGauge from '../components/presentation/ProducerInventoryGauge'
-import SettlementShowcase from '../components/presentation/SettlementShowcase'
-import { Zap, Activity, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
+import type { useWallet } from '../hooks/useWallet'
+import DailyHeatmap from '../components/presentation/DailyHeatmap'
+import MeterTxTable from '../components/presentation/MeterTxTable'
+import SettlementTxTable from '../components/presentation/SettlementTxTable'
+import SalesTxTable from '../components/presentation/SalesTxTable'
+import {
+  DEMO_CONSUMER_WALLET,
+  STORAGE_CONSUMER_WALLET,
+  STORAGE_PRODUCER_WALLET,
+  readStoredWallet,
+  enrichConsumerSettlements,
+  toDateInputValue,
+  shortAddr,
+} from '../lib/presentation'
+import { Calendar } from 'lucide-react'
 
-const SLIDES = [
-  { id: 'overview', label: '통합 대시보드' },
-  { id: 'heatmap', label: '에너지 히트맵' },
-  { id: 'settlement', label: 'P2P 정산' },
-  { id: 'producer', label: '생산 · 판매' },
-  { id: 'architecture', label: '시스템 구조' },
+type WalletHook = ReturnType<typeof useWallet>
+type SubTab = 'heatmap' | 'consumer' | 'supplier'
+
+const SUB_TABS: { id: SubTab; label: string }[] = [
+  { id: 'heatmap', label: '히트맵' },
+  { id: 'consumer', label: '소비자 기록' },
+  { id: 'supplier', label: '공급자 기록' },
 ]
 
-const AUTO_MS = 10000
+interface Props {
+  wallet: WalletHook
+}
 
-export default function PresentationDashboard() {
-  const [slideIdx, setSlideIdx] = useState(0)
-  const [autoPlay, setAutoPlay] = useState(true)
+export default function PresentationDashboard({ wallet }: Props) {
+  const [subTab, setSubTab] = useState<SubTab>('heatmap')
+  const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()))
+  const [consumerWallet, setConsumerWallet] = useState(DEMO_CONSUMER_WALLET)
+  const [producerWallet, setProducerWallet] = useState('')
 
-  const { data: consumerData } = useEnergyData(DEMO_CONSUMER_WALLET)
-  const { data: producerData } = useProducerData(DEMO_PRODUCER_WALLET)
-  const { network } = useNetworkStatus()
+  useEffect(() => {
+    const sync = () => {
+      setConsumerWallet(readStoredWallet(STORAGE_CONSUMER_WALLET, DEMO_CONSUMER_WALLET))
+      const stored = readStoredWallet(STORAGE_PRODUCER_WALLET, '')
+      setProducerWallet(wallet.address || stored)
+    }
+    sync()
+    window.addEventListener('focus', sync)
+    const id = setInterval(sync, 3000)
+    return () => {
+      window.removeEventListener('focus', sync)
+      clearInterval(id)
+    }
+  }, [wallet.address])
+
+  const dateObj = useMemo(() => {
+    const [y, m, d] = selectedDate.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }, [selectedDate])
+
+  const { data: consumerData } = useEnergyData(consumerWallet)
+  const { data: producerData } = useProducerData(producerWallet)
+  const { data: settlementData } = useConsumerSettlements(
+    /^0x[a-fA-F0-9]{40}$/.test(consumerWallet) ? [consumerWallet] : [],
+  )
 
   const consumerReadings = consumerData?.readings ?? []
   const producerReadings = producerData?.productions ?? []
   const sales = producerData?.sales ?? []
 
-  const chainEvents = useMemo(
-    () => buildChainEvents(consumerReadings, producerReadings, sales),
-    [consumerReadings, producerReadings, sales],
+  const enrichedSettlements = useMemo(
+    () => enrichConsumerSettlements(consumerReadings, settlementData?.transfers ?? []),
+    [consumerReadings, settlementData?.transfers],
   )
 
-  useEffect(() => {
-    if (!autoPlay) return
-    const t = setInterval(() => {
-      setSlideIdx((i) => (i + 1) % SLIDES.length)
-    }, AUTO_MS)
-    return () => clearInterval(t)
-  }, [autoPlay])
-
-  const slide = SLIDES[slideIdx]
-  const consumerKWh = consumerData?.overview.totalKWh ?? 0
-  const consumerWh = consumerData?.overview.totalWh ?? 0
+  const overview = producerData?.overview
 
   return (
-    <div className="presentation-mode -mx-4 -mb-6 md:-mx-0 rounded-2xl overflow-hidden">
-      <div className="bg-gradient-to-br from-slate-950 via-[#0f172a] to-indigo-950 min-h-[calc(100vh-12rem)] p-4 md:p-6 lg:p-8">
-        {/* Title bar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 md:mb-6">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Zap className="w-6 h-6 text-amber-400" />
-              <h2 className="text-xl md:text-2xl lg:text-3xl font-black text-white tracking-tight">
-                P2P 에너지 온체인 거래 시스템
-              </h2>
-            </div>
-            <p className="text-xs md:text-sm text-white/50">
-              하드웨어 계량 → 스마트 컨트랙트 → WON 토큰 정산 · Arbitrum Sepolia Live
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
-              <Activity className="w-3.5 h-3.5 animate-pulse" />
-              LIVE
-            </span>
-            {network?.latestBlock && (
-              <span className="text-[10px] font-mono text-white/40 hidden sm:block">
-                Block #{network.latestBlock.toLocaleString()}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="mb-4 md:mb-6">
-          <SystemFlowBanner />
-        </div>
-
-        {/* KPI strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 mb-4 md:mb-6">
-          {[
-            { label: '소비 계량', value: `${consumerKWh.toFixed(2)}`, unit: 'kWh', color: 'from-emerald-600 to-teal-600' },
-            { label: '생산 계량', value: `${(producerData?.overview.totalProductionKWh ?? 0).toFixed(2)}`, unit: 'kWh', color: 'from-amber-600 to-orange-600' },
-            { label: '검증 정산', value: `${sales.length}`, unit: '건', color: 'from-violet-600 to-purple-600' },
-            { label: '온체인 이벤트', value: `${chainEvents.length}`, unit: '최근', color: 'from-indigo-600 to-blue-600' },
-          ].map((kpi) => (
-            <div
-              key={kpi.label}
-              className={`rounded-xl bg-gradient-to-br ${kpi.color} p-3 md:p-4 shadow-lg`}
-            >
-              <p className="text-[10px] md:text-xs text-white/80 font-medium">{kpi.label}</p>
-              <p className="text-xl md:text-3xl font-black text-white mt-0.5">
-                {kpi.value}
-                <span className="text-sm font-normal text-white/70 ml-1">{kpi.unit}</span>
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* Slide nav */}
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            {SLIDES.map((s, i) => (
+    <div className="presentation-mode -mx-4 md:-mx-0">
+      <div className="bg-slate-950 rounded-2xl border border-white/10 overflow-hidden">
+        {/* 헤더 */}
+        <div className="px-4 md:px-6 py-3 md:py-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h2 className="text-base md:text-lg font-bold text-white tracking-tight">
+            소비자/공급자 블록체인 기록
+          </h2>
+          <div className="flex p-0.5 rounded-lg bg-white/5 border border-white/10">
+            {SUB_TABS.map((t) => (
               <button
-                key={s.id}
+                key={t.id}
                 type="button"
-                onClick={() => setSlideIdx(i)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                  i === slideIdx
-                    ? 'bg-white text-slate-900'
-                    : 'bg-white/10 text-white/60 hover:bg-white/20'
+                onClick={() => setSubTab(t.id)}
+                className={`px-3 md:px-5 py-2 rounded-md text-xs md:text-sm font-bold transition-all ${
+                  subTab === t.id
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-white/50 hover:text-white hover:bg-white/10'
                 }`}
               >
-                {s.label}
+                {t.label}
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => setAutoPlay((p) => !p)}
-              className="p-2 rounded-lg bg-white/10 text-white/70 hover:bg-white/20"
-            >
-              {autoPlay ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSlideIdx((i) => (i - 1 + SLIDES.length) % SLIDES.length)}
-              className="p-2 rounded-lg bg-white/10 text-white/70 hover:bg-white/20"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setSlideIdx((i) => (i + 1) % SLIDES.length)}
-              className="p-2 rounded-lg bg-white/10 text-white/70 hover:bg-white/20"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
         </div>
 
-        {/* Slide content */}
-        <div className="min-h-[420px] md:min-h-[480px]">
-          {slide.id === 'overview' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
-              <EnergyHeatmap readings={consumerReadings} title="소비자 · 시간대별 전력" />
-              <OnChainLiveFeed events={chainEvents} latestBlock={network?.latestBlock ?? undefined} />
+        <div className="p-4 md:p-5 h-[calc(100vh-11rem)] md:h-[calc(100vh-10rem)] flex flex-col min-h-0">
+          {/* 탭 1: 히트맵 */}
+          {subTab === 'heatmap' && (
+            <div className="flex flex-col h-full min-h-0 gap-3">
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <label className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                  <Calendar className="w-4 h-4 text-white/50" />
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-transparent text-sm text-white font-medium outline-none [color-scheme:dark]"
+                  />
+                </label>
+                <span className="text-[10px] text-white/40">
+                  소비 {shortAddr(consumerWallet)} · 공급 {producerWallet ? shortAddr(producerWallet) : '지갑 미연결'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0">
+                <DailyHeatmap
+                  title="소비 계량기"
+                  subtitle={consumerWallet}
+                  readings={consumerReadings}
+                  date={dateObj}
+                />
+                <DailyHeatmap
+                  title="공급 계량기"
+                  subtitle={producerWallet || 'MetaMask 연결 필요'}
+                  readings={producerReadings}
+                  date={dateObj}
+                />
+              </div>
             </div>
           )}
 
-          {slide.id === 'heatmap' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <EnergyHeatmap readings={consumerReadings} title="소비 계량 히트맵" />
-              <EnergyHeatmap readings={producerReadings} title="생산 계량 히트맵" />
-            </div>
-          )}
-
-          {slide.id === 'settlement' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
-              <SettlementShowcase sales={sales} consumerKWh={consumerKWh} consumerWh={consumerWh} />
-              <OnChainLiveFeed
-                events={chainEvents.filter((e) => e.type === 'settle')}
-                latestBlock={network?.latestBlock ?? undefined}
+          {/* 탭 2: 소비자 */}
+          {subTab === 'consumer' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full min-h-0">
+              <MeterTxTable
+                title="온체인 계량 기록"
+                readings={consumerReadings}
+                emptyText="소비자 탭에서 계량기를 조회해 주세요"
+              />
+              <SettlementTxTable
+                title="온체인 정산 내역"
+                rows={enrichedSettlements}
+                emptyText="정산 트랜잭션이 없습니다"
               />
             </div>
           )}
 
-          {slide.id === 'producer' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
-              <ProducerInventoryGauge
-                totalKWh={producerData?.overview.totalProductionKWh ?? 0}
-                soldKWh={producerData?.overview.soldKWh ?? 0}
-                availableKWh={producerData?.overview.availableKWh ?? 0}
-                totalWon={producerData?.overview.totalWonReceived ?? 0}
-              />
-              <EnergyHeatmap readings={producerReadings} title="생산 · 시간대별 출력" />
-            </div>
-          )}
-
-          {slide.id === 'architecture' && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 md:p-8">
-              <h3 className="text-lg font-bold text-white mb-6 text-center">시스템 아키텍처</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-                {[
-                  {
-                    title: '소비자 미터',
-                    addr: '0xb551…a7B',
-                    event: 'EnergyDataRecorded',
-                    desc: '하드웨어가 사용 전력(Wh)을 주기적으로 온체인 기록',
-                    color: 'border-emerald-500/40 bg-emerald-500/10',
-                  },
-                  {
-                    title: '생산자 미터',
-                    addr: '0x9F90…2A8',
-                    event: 'EnergyProduced',
-                    desc: '발전소가 생산 전력(kWh)을 온체인 기록',
-                    color: 'border-amber-500/40 bg-amber-500/10',
-                  },
-                  {
-                    title: 'WON 토큰',
-                    addr: '0x8844…fdBB',
-                    event: 'Transfer',
-                    desc: '주차별 kWh × 단가로 P2P 정산 · 계량과 교차 검증',
-                    color: 'border-violet-500/40 bg-violet-500/10',
-                  },
-                ].map((box) => (
-                  <div key={box.title} className={`rounded-xl border p-5 ${box.color}`}>
-                    <p className="text-base font-bold text-white">{box.title}</p>
-                    <p className="text-[10px] font-mono text-white/40 mt-1">{box.addr}</p>
-                    <p className="text-xs text-violet-300 font-semibold mt-2">{box.event}</p>
-                    <p className="text-xs text-white/60 mt-2 leading-relaxed">{box.desc}</p>
-                  </div>
-                ))}
+          {/* 탭 3: 공급자 */}
+          {subTab === 'supplier' && (
+            <div className="flex flex-col h-full min-h-0 gap-3">
+              <div className="grid grid-cols-2 gap-3 shrink-0">
+                <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-center">
+                  <p className="text-[10px] text-white/50 mb-0.5">판매량</p>
+                  <p className="text-xl md:text-2xl font-black text-violet-200">
+                    {(overview?.soldKWh ?? 0).toFixed(3)}
+                    <span className="text-sm font-normal text-white/50 ml-1">kWh</span>
+                  </p>
+                </div>
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-center">
+                  <p className="text-[10px] text-white/50 mb-0.5">판매 재고</p>
+                  <p className="text-xl md:text-2xl font-black text-emerald-200">
+                    {(overview?.availableKWh ?? 0).toFixed(3)}
+                    <span className="text-sm font-normal text-white/50 ml-1">kWh</span>
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center justify-center gap-3 mt-8 flex-wrap text-sm text-white/50">
-                <span className="px-3 py-1 rounded-full bg-white/10">IoT 계량기</span>
-                <span>→</span>
-                <span className="px-3 py-1 rounded-full bg-white/10">Arbitrum Sepolia</span>
-                <span>→</span>
-                <span className="px-3 py-1 rounded-full bg-white/10">대시보드 정산</span>
-                <span>→</span>
-                <span className="px-3 py-1 rounded-full bg-white/10">Arbiscan 검증</span>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0">
+                <MeterTxTable
+                  title="온체인 계량 기록"
+                  readings={producerReadings}
+                  emptyText="생산자 탭에서 조회하거나 MetaMask를 연결해 주세요"
+                />
+                <SalesTxTable title="온체인 판매 내역" sales={sales} />
               </div>
             </div>
           )}
-        </div>
-
-        {/* Bottom ticker */}
-        <div className="mt-4 md:mt-6 pt-4 border-t border-white/10 overflow-hidden">
-          <div className="flex animate-marquee whitespace-nowrap gap-8 text-xs text-white/40">
-            {[...chainEvents, ...chainEvents].map((ev, i) => (
-              <span key={`${ev.id}-${i}`} className="inline-flex items-center gap-2">
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  ev.type === 'consume' ? 'bg-emerald-400' : ev.type === 'produce' ? 'bg-amber-400' : 'bg-violet-400'
-                }`} />
-                {ev.label} · {new Date(ev.timestamp * 1000).toLocaleString('ko-KR')} · Tx {ev.txHash.slice(0, 10)}…
-              </span>
-            ))}
-          </div>
         </div>
       </div>
     </div>

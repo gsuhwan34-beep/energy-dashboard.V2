@@ -11,6 +11,7 @@ import TransactionTable from '../components/TransactionTable'
 import WeeklySettlement from '../components/WeeklySettlement'
 import { Zap, Search, AlertCircle } from 'lucide-react'
 import { api } from '../lib/api'
+import { writeStoredWallet, STORAGE_CONSUMER_WALLET } from '../lib/presentation'
 
 const DEFAULT_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
 
@@ -23,6 +24,10 @@ interface Props {
 export default function ConsumerDashboard({ wallet }: Props) {
   const [walletInput, setWalletInput] = useState(DEFAULT_WALLET)
   const [activeWallet, setActiveWallet] = useState(DEFAULT_WALLET)
+
+  useEffect(() => {
+    writeStoredWallet(STORAGE_CONSUMER_WALLET, activeWallet)
+  }, [activeWallet])
   const [supplierId, setSupplierId] = useState<'renewable' | 'mixed'>('renewable')
   const [isCustomMode, setIsCustomMode] = useState(false)
   const [customSupplierWallet, setCustomSupplierWallet] = useState('')
