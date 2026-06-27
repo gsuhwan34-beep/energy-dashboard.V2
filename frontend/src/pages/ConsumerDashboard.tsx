@@ -1,0 +1,261 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useEnergyData, useNetworkStatus, useConsumerSettlements } from '../hooks/useEnergyData'
+import { SUPPLIERS } from '../hooks/useWallet'
+import type { EnergySupplier } from '../hooks/useWallet'
+import type { useWallet } from '../hooks/useWallet'
+import StatCard from '../components/StatCard'
+import DeviceStatus from '../components/DeviceStatus'
+import LiveReading from '../components/LiveReading'
+import EnergyChart from '../components/EnergyChart'
+import TransactionTable from '../components/TransactionTable'
+import WeeklySettlement from '../components/WeeklySettlement'
+import { Zap, Search, AlertCircle } from 'lucide-react'
+import { api } from '../lib/api'
+
+const DEFAULT_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
+
+type WalletHook = ReturnType<typeof useWallet>
+
+interface Props {
+  wallet: WalletHook
+}
+
+export default function ConsumerDashboard({ wallet }: Props) {
+  const [walletInput, setWalletInput] = useState(DEFAULT_WALLET)
+  const [activeWallet, setActiveWallet] = useState(DEFAULT_WALLET)
+  const [supplierId, setSupplierId] = useState<'renewable' | 'mixed'>('renewable')
+  const [isCustomMode, setIsCustomMode] = useState(false)
+  const [customSupplierWallet, setCustomSupplierWallet] = useState('')
+  const [customSupplierRate, setCustomSupplierRate] = useState<number | ''>(150)
+  const [isFetchingPrice, setIsFetchingPrice] = useState(false)
+  const lastFetchedWalletRef = useRef<string | null>(null)
+  const priceDirtyRef = useRef(false)
+
+  const supplier: EnergySupplier = isCustomMode
+    ? {
+        id: 'custom',
+        label: '신규 무허가 공급자 (P2P)',
+        emoji: '🤝',
+        rate: Number(customSupplierRate) || 0,
+        wallet: customSupplierWallet || '0x0000000000000000000000000000000000000000',
+        description: '공급자가 설정한 단가로 자동 정산됩니다',
+      }
+    : SUPPLIERS[supplierId]
+
+  const { data, loading, error, refetch } = useEnergyData(activeWallet)
+  const { network } = useNetworkStatus()
+
+  const payerWallets = useMemo(() => {
+    const set = new Set<string>()
+    if (/^0x[a-fA-F0-9]{40}$/.test(activeWallet)) set.add(activeWallet)
+    if (wallet.address && /^0x[a-fA-F0-9]{40}$/.test(wallet.address)) set.add(wallet.address)
+    return Array.from(set)
+  }, [activeWallet, wallet.address])
+
+  const { data: settlementData, refetch: refetchSettlements } = useConsumerSettlements(payerWallets)
+
+  const fetchSupplierPrice = useCallback(async (walletAddress: string) => {
+    const normalized = walletAddress.toLowerCase()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) return
+    if (lastFetchedWalletRef.current === normalized) return
+
+    setIsFetchingPrice(true)
+    try {
+      const res = await fetch(api(`supplier/price/${walletAddress}`))
+      if (!res.ok) throw new Error('price fetch failed')
+      const resData = await res.json()
+      lastFetchedWalletRef.current = normalized
+      if (!priceDirtyRef.current) {
+        setCustomSupplierRate(Number(resData.price))
+      }
+    } catch (err) {
+      console.error('단가 조회 실패:', err)
+    } finally {
+      setIsFetchingPrice(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isCustomMode) return
+    const trimmed = customSupplierWallet.trim()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
+      lastFetchedWalletRef.current = null
+      return
+    }
+    if (lastFetchedWalletRef.current !== trimmed.toLowerCase()) {
+      priceDirtyRef.current = false
+    }
+    fetchSupplierPrice(trimmed)
+  }, [customSupplierWallet, isCustomMode, fetchSupplierPrice])
+
+  const handleSupplierWalletChange = (value: string) => {
+    const next = value.trim()
+    if (next.toLowerCase() !== (lastFetchedWalletRef.current ?? '')) {
+      priceDirtyRef.current = false
+    }
+    setCustomSupplierWallet(value)
+  }
+
+  const overview = data?.overview ?? null
+  const readings = data?.readings ?? []
+  const totalKWh = overview?.totalKWh ?? 0
+  const estimatedCost = totalKWh * supplier.rate
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = walletInput.trim()
+    if (/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
+      setActiveWallet(trimmed)
+    }
+  }
+
+  return (
+    <>
+      <form onSubmit={handleSubmit} className="mb-4">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted" />
+            <input
+              type="text"
+              value={walletInput}
+              onChange={(e) => setWalletInput(e.target.value)}
+              placeholder="내 계량기 주소 조회 (0x...)"
+              className="w-full pl-9 pr-3 py-2.5 text-sm font-mono bg-bg-base-opaque border border-border-strong rounded-lg text-fg-base placeholder:text-fg-muted focus:outline-none focus:border-brand-100 transition-colors"
+            />
+          </div>
+          <button type="submit" className="px-4 py-2.5 text-sm font-medium bg-brand-100 text-white rounded-lg hover:opacity-90 transition-opacity shrink-0">
+            조회
+          </button>
+        </div>
+      </form>
+
+      <div className="flex flex-col gap-2 mb-4">
+        <div className="flex flex-col md:flex-row gap-2">
+          {Object.values(SUPPLIERS).map((s) => (
+            <button
+              key={s.id}
+              onClick={() => { setSupplierId(s.id as 'renewable' | 'mixed'); setIsCustomMode(false) }}
+              className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-left transition-all ${
+                !isCustomMode && supplierId === s.id
+                  ? 'border-brand-100 bg-brand-10/50 ring-1 ring-brand-100'
+                  : 'border-border-strong bg-bg-base-opaque hover:bg-bg-subtle'
+              }`}
+            >
+              <span className="text-xl">{s.emoji}</span>
+              <div className="min-w-0">
+                <div className={`text-sm font-semibold ${!isCustomMode && supplierId === s.id ? 'text-brand-100' : 'text-fg-base'}`}>{s.label}</div>
+                <div className="text-[10px] text-fg-muted">{s.description} · {s.rate}원/kWh</div>
+              </div>
+            </button>
+          ))}
+
+          <button
+            onClick={() => setIsCustomMode(true)}
+            className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-left transition-all ${
+              isCustomMode ? 'border-brand-100 bg-brand-10/50 ring-1 ring-brand-100' : 'border-border-strong bg-bg-base-opaque hover:bg-bg-subtle'
+            }`}
+          >
+            <span className="text-xl">🤝</span>
+            <div className="min-w-0">
+              <div className={`text-sm font-semibold ${isCustomMode ? 'text-brand-100' : 'text-fg-base'}`}>P2P 1:1 직거래 (지갑 검색)</div>
+              <div className="text-[10px] text-fg-muted">생산자 지갑 주소로 단가 조회 후 정산</div>
+            </div>
+          </button>
+        </div>
+
+        {isCustomMode && (
+          <div className="flex flex-col sm:flex-row gap-2 p-3 border border-brand-100/30 bg-brand-10/10 rounded-lg mt-1">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-100/70" />
+              <input
+                type="text"
+                value={customSupplierWallet}
+                onChange={(e) => handleSupplierWalletChange(e.target.value)}
+                placeholder="정산할 생산자 지갑 주소 입력 (0x...)"
+                className="w-full pl-9 pr-3 py-2 text-sm font-mono bg-bg-base border border-border-strong rounded-md text-fg-base focus:outline-none focus:border-brand-100"
+              />
+            </div>
+            <div className="w-full sm:w-48 relative">
+              <input
+                type="number"
+                value={customSupplierRate === '' ? '' : customSupplierRate}
+                disabled
+                placeholder={isFetchingPrice ? '조회 중...' : '단가'}
+                className="w-full pl-3 pr-10 py-2 text-sm font-bold bg-bg-subtle border border-border-strong rounded-md text-fg-base opacity-70 cursor-not-allowed"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-fg-muted font-bold">WON</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 rounded-lg border border-tag-orange-100/30 bg-tag-orange-10 flex items-center gap-2 text-xs text-tag-orange-100">
+          <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+        </div>
+      )}
+
+      {loading && !data && (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="w-8 h-8 border-2 border-brand-100 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-fg-muted">데이터 조회 중...</span>
+        </div>
+      )}
+
+      {data && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <StatCard label="총 전력량" value={`${overview?.totalWh ?? 0} Wh`} sub={`${totalKWh.toFixed(4)} kWh`} accent />
+            <StatCard
+              label="예상 요금"
+              value={`${estimatedCost.toLocaleString('ko-KR', { maximumFractionDigits: 3 })}원`}
+              sub={`${supplier.emoji} ${supplier.rate} WON/kWh`}
+            />
+            <StatCard label="전송 횟수" value={`${overview?.totalReadings ?? 0}회`} />
+            <StatCard
+              label="최근 계량"
+              value={overview?.lastReading ? `${overview.lastReading.wh} Wh` : '-'}
+              sub={overview?.lastReading ? formatTimeAgo(overview.lastReading.timestamp) : '기록 없음'}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            <div className="lg:col-span-2"><EnergyChart readings={readings} /></div>
+            <div className="space-y-4">
+              <LiveReading reading={overview?.lastReading ?? null} totalReadings={overview?.totalReadings ?? 0} />
+              <DeviceStatus wallet={data.wallet} contract={data.contract} network={network} latestBlock={data.latestBlock} />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <WeeklySettlement
+              readings={readings}
+              settlements={settlementData?.transfers ?? []}
+              isWalletConnected={wallet.isConnected && wallet.isCorrectNetwork}
+              supplier={supplier}
+              payerWallets={payerWallets}
+              onTransfer={wallet.transferWon}
+              onSettlementDone={refetchSettlements}
+            />
+          </div>
+          <TransactionTable readings={readings} />
+        </>
+      )}
+
+      {!data && !loading && !error && (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Zap className="w-8 h-8 text-fg-muted" />
+          <p className="text-sm text-fg-muted">계량기 주소를 입력하여 전력 데이터를 조회하세요</p>
+        </div>
+      )}
+    </>
+  )
+}
+
+function formatTimeAgo(unixSec: number): string {
+  const diff = Math.floor(Date.now() / 1000) - unixSec
+  if (diff < 60) return `${diff}초 전`
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
+  return `${Math.floor(diff / 86400)}일 전`
+}

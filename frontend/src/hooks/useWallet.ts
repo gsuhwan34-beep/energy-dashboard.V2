@@ -11,6 +11,8 @@ const ARBITRUM_SEPOLIA_CONFIG = {
   blockExplorerUrls: ['https://sepolia.arbiscan.io'],
 }
 
+export const PRODUCER_METER_ADDRESS = '0x9F9013b71f59d8ecf4730B4946F988827e3EE2A8'
+
 // WON 토큰 정보
 const WON_TOKEN_ADDRESS = '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB'
 const WON_TOKEN_ABI = ['function transfer(address to, uint amount) returns (bool)']

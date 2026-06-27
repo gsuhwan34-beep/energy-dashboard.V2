@@ -21,6 +21,10 @@ const METER_ADDRESS = '0xb551a87e38E7A838d9E8C3ef2CDbD40725Ad6a7B';
 const METER_ABI = ["event EnergyDataRecorded(address indexed device, uint256 powerValue, uint256 timestamp)"];
 const meterContract = new ethers.Contract(METER_ADDRESS, METER_ABI, provider);
 
+const PRODUCER_METER_ADDRESS = '0x9F9013b71f59d8ecf4730B4946F988827e3EE2A8';
+const PRODUCER_METER_ABI = ["event EnergyProduced(address indexed producer, uint256 powerValue, uint256 timestamp)"];
+const producerMeterContract = new ethers.Contract(PRODUCER_METER_ADDRESS, PRODUCER_METER_ABI, provider);
+
 const WON_ADDRESS = '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB';
 const WON_ABI = ["event Transfer(address indexed from, address indexed to, uint256 value)"];
 const wonContract = new ethers.Contract(WON_ADDRESS, WON_ABI, provider);
@@ -49,6 +53,14 @@ function isValidAddress(address) {
   return typeof address === 'string' && /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
+function normalizePowerValue(powerValue, timestamp) {
+  let value = Number(powerValue);
+  if (timestamp >= MAY_22_TIMESTAMP) {
+    value = value / 1000;
+  }
+  return value;
+}
+
 // ----------------------------------------------------
 // 1. 핵심 에너지 계량 데이터 API (논스 정렬 및 소수점 보존 포함)
 // ----------------------------------------------------
@@ -62,13 +74,8 @@ app.get('/api/energy', async (req, res) => {
     
     let totalWh = 0;
     let readings = logs.map(log => {
-      let powerValue = Number(log.args[1]);
       const timestamp = Number(log.args[2]);
-      
-      if (timestamp >= MAY_22_TIMESTAMP) {
-        powerValue = powerValue / 1000;
-      }
-      
+      const powerValue = normalizePowerValue(log.args[1], timestamp);
       totalWh += powerValue;
       
       return {
@@ -236,6 +243,102 @@ app.get('/api/supplier/price/:wallet', (req, res) => {
 });
 
 // ----------------------------------------------------
+// 4. 생산자(공급자) 대시보드 API
+// ?wallet=0x... — 생산자 지갑
+// ----------------------------------------------------
+app.get('/api/producer', async (req, res) => {
+  try {
+    const wallet = req.query.wallet;
+    if (!isValidAddress(wallet)) {
+      return res.status(400).json({ error: 'Valid producer wallet required (?wallet=0x...)' });
+    }
+
+    const producer = ethers.getAddress(wallet);
+    const filter = producerMeterContract.filters.EnergyProduced(producer);
+    const logs = await producerMeterContract.queryFilter(filter, START_BLOCK, 'latest');
+
+    let totalWh = 0;
+    const productions = logs.map((log) => {
+      const timestamp = Number(log.args[2]);
+      const powerValue = normalizePowerValue(log.args[1], timestamp);
+      totalWh += powerValue;
+      return {
+        txHash: log.transactionHash,
+        blockNumber: log.blockNumber,
+        logIndex: log.index,
+        wh: Number(powerValue.toFixed(4)),
+        kWh: Number((powerValue / 1000).toFixed(6)),
+        timestamp,
+        date: new Date(timestamp * 1000).toISOString(),
+      };
+    });
+
+    productions.sort((a, b) => {
+      if (a.blockNumber !== b.blockNumber) return a.blockNumber - b.blockNumber;
+      return a.logIndex - b.logIndex;
+    });
+
+    totalWh = Number(totalWh.toFixed(4));
+    const totalProductionKWh = totalWh / 1000;
+
+    const inboundFilter = wonContract.filters.Transfer(null, producer);
+    const inboundLogs = await wonContract.queryFilter(inboundFilter, START_BLOCK, 'latest');
+    const sales = [];
+
+    for (const log of inboundLogs) {
+      if (log.args[0] === ethers.ZeroAddress) continue;
+      sales.push({
+        txHash: log.transactionHash,
+        blockNumber: log.blockNumber,
+        timestamp: await getBlockTimestamp(log.blockNumber),
+        from: ethers.getAddress(log.args[0]),
+        to: producer,
+        wonAmount: Number(ethers.formatUnits(log.args[2], 18)),
+      });
+    }
+
+    sales.sort((a, b) => a.timestamp - b.timestamp);
+    const totalWonReceived = Number(sales.reduce((sum, s) => sum + s.wonAmount, 0).toFixed(6));
+    const ratePerKwh = supplierPrices[producer.toLowerCase()] !== undefined
+      ? supplierPrices[producer.toLowerCase()]
+      : 150;
+    const soldKWh = ratePerKwh > 0
+      ? Number((totalWonReceived / ratePerKwh).toFixed(6))
+      : 0;
+    const availableKWh = Math.max(0, Number((totalProductionKWh - soldKWh).toFixed(6)));
+
+    const currentBlock = await provider.getBlockNumber();
+
+    res.json({
+      wallet: producer,
+      contract: PRODUCER_METER_ADDRESS,
+      wonToken: WON_ADDRESS,
+      network: 'Arbitrum Sepolia',
+      chainId: 421614,
+      latestBlock: currentBlock,
+      ratePerKwh,
+      overview: {
+        totalReadings: productions.length,
+        totalWh,
+        totalProductionKWh,
+        totalWonReceived,
+        soldKWh,
+        soldWh: Number((soldKWh * 1000).toFixed(4)),
+        availableKWh,
+        availableWh: Number((availableKWh * 1000).toFixed(4)),
+        firstProduction: productions.length > 0 ? productions[0] : null,
+        lastProduction: productions.length > 0 ? productions[productions.length - 1] : null,
+      },
+      productions,
+      sales,
+    });
+  } catch (error) {
+    console.error('Producer fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch producer data' });
+  }
+});
+
+// ----------------------------------------------------
 // 3. 네트워크 상태 API
 // ----------------------------------------------------
 app.get('/api/energy/network', async (req, res) => {
@@ -247,6 +350,7 @@ app.get('/api/energy/network', async (req, res) => {
       latestBlock: blockNum,
       rpcUrl: RPC_URL,
       contract: METER_ADDRESS,
+      producerContract: PRODUCER_METER_ADDRESS,
       status: 'connected'
     });
   } catch (error) {
