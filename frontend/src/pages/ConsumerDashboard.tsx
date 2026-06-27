@@ -7,11 +7,12 @@ import StatCard from '../components/StatCard'
 import DeviceStatus from '../components/DeviceStatus'
 import LiveReading from '../components/LiveReading'
 import EnergyChart from '../components/EnergyChart'
+import DashboardHeatmap from '../components/DashboardHeatmap'
 import TransactionTable from '../components/TransactionTable'
 import WeeklySettlement from '../components/WeeklySettlement'
 import { Zap, Search, AlertCircle } from 'lucide-react'
 import { api } from '../lib/api'
-import { writeStoredWallet, STORAGE_CONSUMER_WALLET } from '../lib/presentation'
+import { writeStoredWallet, STORAGE_CONSUMER_WALLET, STORAGE_SUPPLIER_RATE } from '../lib/presentation'
 
 const DEFAULT_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
 
@@ -24,17 +25,18 @@ interface Props {
 export default function ConsumerDashboard({ wallet }: Props) {
   const [walletInput, setWalletInput] = useState(DEFAULT_WALLET)
   const [activeWallet, setActiveWallet] = useState(DEFAULT_WALLET)
+  const [weekAnchor, setWeekAnchor] = useState(() => new Date())
 
   useEffect(() => {
     writeStoredWallet(STORAGE_CONSUMER_WALLET, activeWallet)
   }, [activeWallet])
+
   const [supplierId, setSupplierId] = useState<'renewable' | 'mixed'>('renewable')
   const [isCustomMode, setIsCustomMode] = useState(false)
   const [customSupplierWallet, setCustomSupplierWallet] = useState('')
   const [customSupplierRate, setCustomSupplierRate] = useState<number | ''>(150)
   const [isFetchingPrice, setIsFetchingPrice] = useState(false)
   const lastFetchedWalletRef = useRef<string | null>(null)
-  const priceDirtyRef = useRef(false)
 
   const supplier: EnergySupplier = isCustomMode
     ? {
@@ -43,9 +45,19 @@ export default function ConsumerDashboard({ wallet }: Props) {
         emoji: '🤝',
         rate: Number(customSupplierRate) || 0,
         wallet: customSupplierWallet || '0x0000000000000000000000000000000000000000',
-        description: '공급자가 설정한 단가로 자동 정산됩니다',
+        description: '생산자 탭에서 설정한 단가로 정산됩니다',
       }
     : SUPPLIERS[supplierId]
+
+  useEffect(() => {
+    if (supplier.rate > 0) {
+      try {
+        localStorage.setItem(STORAGE_SUPPLIER_RATE, String(supplier.rate))
+      } catch {
+        // ignore
+      }
+    }
+  }, [supplier.rate])
 
   const { data, loading, error, refetch } = useEnergyData(activeWallet)
   const { network } = useNetworkStatus()
@@ -70,9 +82,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
       if (!res.ok) throw new Error('price fetch failed')
       const resData = await res.json()
       lastFetchedWalletRef.current = normalized
-      if (!priceDirtyRef.current) {
-        setCustomSupplierRate(Number(resData.price))
-      }
+      setCustomSupplierRate(Number(resData.price))
     } catch (err) {
       console.error('단가 조회 실패:', err)
     } finally {
@@ -88,15 +98,14 @@ export default function ConsumerDashboard({ wallet }: Props) {
       return
     }
     if (lastFetchedWalletRef.current !== trimmed.toLowerCase()) {
-      priceDirtyRef.current = false
+      fetchSupplierPrice(trimmed)
     }
-    fetchSupplierPrice(trimmed)
   }, [customSupplierWallet, isCustomMode, fetchSupplierPrice])
 
   const handleSupplierWalletChange = (value: string) => {
     const next = value.trim()
     if (next.toLowerCase() !== (lastFetchedWalletRef.current ?? '')) {
-      priceDirtyRef.current = false
+      lastFetchedWalletRef.current = null
     }
     setCustomSupplierWallet(value)
   }
@@ -139,6 +148,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
           {Object.values(SUPPLIERS).map((s) => (
             <button
               key={s.id}
+              type="button"
               onClick={() => { setSupplierId(s.id as 'renewable' | 'mixed'); setIsCustomMode(false) }}
               className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-left transition-all ${
                 !isCustomMode && supplierId === s.id
@@ -155,6 +165,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
           ))}
 
           <button
+            type="button"
             onClick={() => setIsCustomMode(true)}
             className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-left transition-all ${
               isCustomMode ? 'border-brand-100 bg-brand-10/50 ring-1 ring-brand-100' : 'border-border-strong bg-bg-base-opaque hover:bg-bg-subtle'
@@ -182,14 +193,21 @@ export default function ConsumerDashboard({ wallet }: Props) {
             </div>
             <div className="w-full sm:w-48 relative">
               <input
-                type="number"
-                value={customSupplierRate === '' ? '' : customSupplierRate}
-                disabled
-                placeholder={isFetchingPrice ? '조회 중...' : '단가'}
-                className="w-full pl-3 pr-10 py-2 text-sm font-bold bg-bg-subtle border border-border-strong rounded-md text-fg-base opacity-70 cursor-not-allowed"
+                type="text"
+                readOnly
+                value={
+                  isFetchingPrice
+                    ? '조회 중...'
+                    : customSupplierRate !== ''
+                      ? `${customSupplierRate} WON/kWh`
+                      : '단가 미설정'
+                }
+                className="w-full pl-3 pr-3 py-2 text-sm font-bold bg-bg-subtle border border-border-strong rounded-md text-fg-base opacity-80 cursor-default"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-fg-muted font-bold">WON</span>
             </div>
+            <p className="text-[10px] text-fg-muted sm:self-center sm:max-w-[140px]">
+              단가는 생산자 탭에서만 수정할 수 있습니다.
+            </p>
           </div>
         )}
       </div>
@@ -225,7 +243,19 @@ export default function ConsumerDashboard({ wallet }: Props) {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-            <div className="lg:col-span-2"><EnergyChart readings={readings} /></div>
+            <div className="lg:col-span-2 space-y-4">
+              <EnergyChart
+                readings={readings}
+                anchorDate={weekAnchor}
+                onAnchorDateChange={setWeekAnchor}
+              />
+              <DashboardHeatmap
+                title="소비 전력 히트맵"
+                readings={readings}
+                anchorDate={weekAnchor}
+                onAnchorDateChange={setWeekAnchor}
+              />
+            </div>
             <div className="space-y-4">
               <LiveReading reading={overview?.lastReading ?? null} totalReadings={overview?.totalReadings ?? 0} />
               <DeviceStatus wallet={data.wallet} contract={data.contract} network={network} latestBlock={data.latestBlock} />

@@ -1,9 +1,11 @@
-import type { EnergyReading, SettlementTransfer } from '../hooks/useEnergyData'
+import type { EnergyReading } from '../hooks/useEnergyData'
 import type { VerifiedProducerSale } from '../hooks/useProducerData'
-import { PRESET_SETTLEMENT_RATES } from '../hooks/useWallet'
+
+export { getCalendarWeekDays, formatDayLabel } from './settlementMatch'
 
 export const STORAGE_CONSUMER_WALLET = 'emeter:consumer-wallet'
 export const STORAGE_PRODUCER_WALLET = 'emeter:producer-wallet'
+export const STORAGE_SUPPLIER_RATE = 'emeter:supplier-rate'
 
 export const DEMO_CONSUMER_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
 
@@ -12,9 +14,6 @@ export interface HourCell {
   wh: number
   count: number
 }
-
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000
-const EPOCH_START_MS = new Date('2026-05-04T00:00:00+09:00').getTime()
 
 export function readStoredWallet(key: string, fallback = ''): string {
   try {
@@ -31,6 +30,17 @@ export function writeStoredWallet(key: string, wallet: string) {
     }
   } catch {
     // ignore
+  }
+}
+
+export function readStoredSupplierRate(): number[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_SUPPLIER_RATE)
+    if (!raw) return []
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? [n] : []
+  } catch {
+    return []
   }
 }
 
@@ -71,110 +81,6 @@ export function heatmapColor(wh: number, maxWh: number): string {
 export function shortAddr(addr: string) {
   if (!addr || addr.length < 10) return addr || '—'
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`
-}
-
-function getWeekIndex(timestamp: number): number {
-  return Math.floor((timestamp * 1000 - EPOCH_START_MS) / WEEK_MS)
-}
-
-function getWeekStart(weekIndex: number): Date {
-  return new Date(EPOCH_START_MS + weekIndex * WEEK_MS)
-}
-
-function getWeekEnd(weekIndex: number): Date {
-  return new Date(EPOCH_START_MS + (weekIndex + 1) * WEEK_MS - 1)
-}
-
-function amountsMatch(expected: number, actual: number): boolean {
-  if (expected <= 0) return actual <= 0.01
-  return Math.abs(expected - actual) <= Math.max(0.01, expected * 0.05)
-}
-
-function groupWeekKwh(readings: EnergyReading[]) {
-  const map: Record<number, number> = {}
-  for (const r of readings) {
-    const idx = getWeekIndex(r.timestamp)
-    map[idx] = (map[idx] ?? 0) + r.kWh
-  }
-  return map
-}
-
-export interface EnrichedSettlement {
-  txHash: string
-  timestamp: number
-  wonAmount: number
-  kWh: number | null
-  ratePerKwh: number | null
-  weekLabel: string | null
-}
-
-export function enrichConsumerSettlements(
-  readings: EnergyReading[],
-  transfers: SettlementTransfer[],
-  extraRates: number[] = [],
-): EnrichedSettlement[] {
-  const weekKwh = groupWeekKwh(readings)
-  const rates = [...new Set([...PRESET_SETTLEMENT_RATES, ...extraRates.filter((r) => r > 0)])]
-  const used = new Set<string>()
-
-  const weeks = Object.keys(weekKwh)
-    .map(Number)
-    .sort((a, b) => a - b)
-
-  const enriched: EnrichedSettlement[] = []
-
-  for (const t of [...transfers].sort((a, b) => a.timestamp - b.timestamp)) {
-    let matched: EnrichedSettlement = {
-      txHash: t.txHash,
-      timestamp: t.timestamp,
-      wonAmount: t.wonAmount,
-      kWh: null,
-      ratePerKwh: null,
-      weekLabel: null,
-    }
-
-    for (const idx of weeks) {
-      const kWh = weekKwh[idx]
-      if (kWh <= 0) continue
-      const weekStartTs = Math.floor(getWeekStart(idx).getTime() / 1000)
-      if (t.timestamp < weekStartTs) continue
-
-      let ok = false
-      let rate = 0
-      for (const r of rates) {
-        if (amountsMatch(kWh * r, t.wonAmount)) {
-          ok = true
-          rate = r
-          break
-        }
-      }
-      if (!ok) {
-        const implied = t.wonAmount / kWh
-        if (implied >= 10 && implied <= 500 && amountsMatch(kWh * implied, t.wonAmount)) {
-          ok = true
-          rate = Number(implied.toFixed(2))
-        }
-      }
-      if (!ok || used.has(`${idx}-${t.txHash}`)) continue
-
-      const start = getWeekStart(idx)
-      const end = getWeekEnd(idx)
-      matched = {
-        txHash: t.txHash,
-        timestamp: t.timestamp,
-        wonAmount: t.wonAmount,
-        kWh,
-        ratePerKwh: rate,
-        weekLabel: `${start.getMonth() + 1}/${start.getDate()} ~ ${end.getMonth() + 1}/${end.getDate()}`,
-      }
-      used.add(`${idx}-${t.txHash}`)
-      break
-    }
-
-    enriched.push(matched)
-  }
-
-  return enriched.sort((a, b) => b.timestamp - a.timestamp)
 }
 
 export function toDateInputValue(d: Date): string {

@@ -1,30 +1,26 @@
 import { useState, useMemo } from 'react'
+import { Calendar } from 'lucide-react'
 import ReactECharts from 'echarts-for-react'
 import type { EnergyReading } from '../hooks/useEnergyData'
+import {
+  getCalendarWeekDays,
+  formatDayLabel,
+  toDateInputValue,
+} from '../lib/presentation'
 
 interface Props {
   readings: EnergyReading[]
+  anchorDate: Date
+  onAnchorDateChange: (date: Date) => void
 }
 
 type ChartTab = 'individual' | 'cumulative'
-type TimeRange = '1D' | '7D' | '30D' | '1Y' | '5Y'
 
 const CHART_TABS: { key: ChartTab; label: string }[] = [
-  { key: 'individual', label: '계량 전력' },
-  { key: 'cumulative', label: '누적 전력량' },
+  { key: 'individual', label: '일별 전력' },
+  { key: 'cumulative', label: '주간 누적' },
 ]
 
-const TIME_RANGES: TimeRange[] = ['1D', '7D', '30D', '1Y', '5Y']
-
-const RANGE_MS: Record<TimeRange, number> = {
-  '1D': 86400_000,
-  '7D': 7 * 86400_000,
-  '30D': 30 * 86400_000,
-  '1Y': 365 * 86400_000,
-  '5Y': 5 * 365 * 86400_000,
-}
-
-// Light theme chart vars
 const tooltipBg = '#fff'
 const tooltipBorder = 'rgba(42,42,42,0.08)'
 const fgBase = '#212121'
@@ -33,32 +29,45 @@ const axisLabelColor = fgSubtle
 const axisLineColor = '#7a7a7a'
 const splitLineColor = '#f0f0f0'
 
-export default function EnergyChart({ readings }: Props) {
-  const [tab, setTab] = useState<ChartTab>('individual')
-  const [range, setRange] = useState<TimeRange>('5Y')
+function aggregateWeekDaily(readings: EnergyReading[], weekDays: Date[]) {
+  return weekDays.map((day) => {
+    const dayStart = new Date(day)
+    dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(day)
+    dayEnd.setHours(23, 59, 59, 999)
 
-  const filtered = useMemo(() => {
-    if (!readings.length) return []
-    const cutoff = Date.now() - RANGE_MS[range]
-    return readings.filter(r => r.timestamp * 1000 >= cutoff)
-  }, [readings, range])
+    const inDay = readings.filter((r) => {
+      const t = r.timestamp * 1000
+      return t >= dayStart.getTime() && t <= dayEnd.getTime()
+    })
+
+    const wh = inDay.reduce((s, r) => s + r.wh, 0)
+    const kWh = inDay.reduce((s, r) => s + r.kWh, 0)
+    return { label: formatDayLabel(day), wh, kWh, count: inDay.length }
+  })
+}
+
+export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }: Props) {
+  const [tab, setTab] = useState<ChartTab>('individual')
+
+  const weekDays = useMemo(() => getCalendarWeekDays(anchorDate), [anchorDate])
+  const daily = useMemo(() => aggregateWeekDaily(readings, weekDays), [readings, weekDays])
+  const weekLabel = `${formatDayLabel(weekDays[0])} ~ ${formatDayLabel(weekDays[6])}`
+  const hasData = daily.some((d) => d.wh > 0)
 
   const option = useMemo(() => {
-    if (!filtered.length) return {}
+    if (!hasData) return {}
 
-    const labels = filtered.map(r => {
-      const d = new Date(r.timestamp * 1000)
-      return d.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-    })
+    const labels = daily.map((d) => d.label)
 
     if (tab === 'individual') {
       return {
         grid: { left: 56, right: 16, top: 16, bottom: 32 },
         tooltip: makeTooltip((params: any[]) => {
           const header = `<div style="font-weight:600;font-size:12px;color:${fgBase};margin-bottom:4px">${params[0].axisValueLabel}</div>`
-          const rows = params.map((p: any) =>
-            tooltipRow(p.color, p.seriesName, `${p.value} Wh`)
-          ).join('')
+          const rows = params
+            .map((p: any) => tooltipRow(p.color, p.seriesName, `${p.value} Wh`))
+            .join('')
           return header + rows
         }),
         xAxis: makeXAxis(labels),
@@ -72,18 +81,17 @@ export default function EnergyChart({ readings }: Props) {
           splitLine: { lineStyle: { type: 'dashed' as const, color: splitLineColor } },
         },
         series: [{
-          name: '계량 전력',
+          name: '일별 전력',
           type: 'bar',
-          data: filtered.map(r => r.wh),
+          data: daily.map((d) => Number(d.wh.toFixed(2))),
           itemStyle: { color: '#fd4b96', borderRadius: [2, 2, 0, 0] },
-          barMaxWidth: 40,
+          barMaxWidth: 48,
         }],
       }
     }
 
-    // Cumulative
-    const cumKwh = filtered.reduce<number[]>((acc, r, i) => {
-      acc.push(i === 0 ? r.kWh : +(acc[i - 1] + r.kWh).toFixed(4))
+    const cumKwh = daily.reduce<number[]>((acc, d, i) => {
+      acc.push(i === 0 ? d.kWh : +(acc[i - 1] + d.kWh).toFixed(4))
       return acc
     }, [])
 
@@ -91,9 +99,9 @@ export default function EnergyChart({ readings }: Props) {
       grid: { left: 56, right: 16, top: 16, bottom: 32 },
       tooltip: makeTooltip((params: any[]) => {
         const header = `<div style="font-weight:600;font-size:12px;color:${fgBase};margin-bottom:4px">${params[0].axisValueLabel}</div>`
-        const rows = params.map((p: any) =>
-          tooltipRow(p.color, p.seriesName, `${p.value} kWh`)
-        ).join('')
+        const rows = params
+          .map((p: any) => tooltipRow(p.color, p.seriesName, `${p.value} kWh`))
+          .join('')
         return header + rows
       }),
       xAxis: makeXAxis(labels),
@@ -118,17 +126,16 @@ export default function EnergyChart({ readings }: Props) {
         areaStyle: { color: 'rgba(99,102,241,0.08)' },
       }],
     }
-  }, [filtered, tab])
+  }, [daily, tab, hasData])
 
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
-      {/* 상단: 차트 타입 탭 + 기간 탭 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-        {/* 차트 타입 */}
         <div className="flex gap-1">
-          {CHART_TABS.map(t => (
+          {CHART_TABS.map((t) => (
             <button
               key={t.key}
+              type="button"
               onClick={() => setTab(t.key)}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                 tab === t.key
@@ -141,30 +148,27 @@ export default function EnergyChart({ readings }: Props) {
           ))}
         </div>
 
-        {/* 기간 */}
-        <div className="flex gap-1">
-          {TIME_RANGES.map(r => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${
-                range === r
-                  ? 'bg-brand-100 text-white'
-                  : 'text-fg-muted hover:text-fg-subtle'
-              }`}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
+        <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border-strong bg-bg-subtle text-xs shrink-0">
+          <Calendar className="w-3.5 h-3.5 text-fg-muted" />
+          <input
+            type="date"
+            value={toDateInputValue(anchorDate)}
+            onChange={(e) => {
+              const [y, m, d] = e.target.value.split('-').map(Number)
+              onAnchorDateChange(new Date(y, m - 1, d))
+            }}
+            className="bg-transparent text-fg-base font-medium outline-none [color-scheme:light]"
+          />
+        </label>
       </div>
 
-      {/* 차트 */}
-      {filtered.length > 0 ? (
+      <p className="text-[10px] text-fg-muted mb-2">{weekLabel} (7일)</p>
+
+      {hasData ? (
         <ReactECharts option={option} style={{ height: 280 }} opts={{ renderer: 'svg' }} />
       ) : (
         <div className="h-[280px] flex items-center justify-center text-sm text-fg-muted">
-          해당 기간에 기록된 데이터가 없습니다
+          선택한 주에 기록된 데이터가 없습니다
         </div>
       )}
     </div>

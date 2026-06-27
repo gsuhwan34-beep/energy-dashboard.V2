@@ -1,5 +1,6 @@
 import type { VerifiedProducerSale } from '../../hooks/useProducerData'
 import { shortAddr } from '../../lib/presentation'
+import OnChainExplainer, { TxLink } from './OnChainExplainer'
 
 interface Props {
   title: string
@@ -11,8 +12,12 @@ export default function SalesTxTable({ title, sales }: Props) {
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] flex flex-col h-full min-h-0 overflow-hidden">
-      <div className="px-3 py-2 border-b border-white/10 shrink-0">
+      <div className="px-3 py-2 border-b border-white/10 shrink-0 space-y-2">
         <h4 className="text-sm font-bold text-white">{title}</h4>
+        <p className="text-[10px] text-white/45">
+          구매자 계량과 교차 검증된 P2P 판매 내역만 표시합니다.
+        </p>
+        <OnChainExplainer />
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         {sorted.length === 0 ? (
@@ -21,7 +26,7 @@ export default function SalesTxTable({ title, sales }: Props) {
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-slate-900/95 text-white/50">
               <tr>
-                <th className="px-2 py-1.5 text-left font-medium">시각</th>
+                <th className="px-2 py-1.5 text-left font-medium">정산 주차</th>
                 <th className="px-2 py-1.5 text-left font-medium">구매자</th>
                 <th className="px-2 py-1.5 text-right font-medium">kWh</th>
                 <th className="px-2 py-1.5 text-right font-medium">WON</th>
@@ -32,24 +37,13 @@ export default function SalesTxTable({ title, sales }: Props) {
             <tbody className="divide-y divide-white/5">
               {sorted.map((s) => (
                 <tr key={s.txHash} className="hover:bg-white/5">
-                  <td className="px-2 py-1.5 text-white/70 whitespace-nowrap">
-                    {new Date(s.timestamp * 1000).toLocaleString('ko-KR', {
-                      month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                    })}
-                  </td>
-                  <td className="px-2 py-1.5 font-mono text-white/80">{shortAddr(s.from)}</td>
-                  <td className="px-2 py-1.5 text-right text-emerald-300 font-semibold">{s.kWh.toFixed(4)}</td>
-                  <td className="px-2 py-1.5 text-right text-white font-semibold">{s.wonAmount.toFixed(2)}</td>
-                  <td className="px-2 py-1.5 text-right text-white/60">{s.ratePerKwh}</td>
-                  <td className="px-2 py-1.5">
-                    <a
-                      href={`https://sepolia.arbiscan.io/tx/${s.txHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-violet-300 hover:underline"
-                    >
-                      {shortAddr(s.txHash)}
-                    </a>
+                  <td className="px-2 py-2 text-white/80 whitespace-nowrap">{s.weekLabel}</td>
+                  <td className="px-2 py-2 font-mono text-white/70">{shortAddr(s.from)}</td>
+                  <td className="px-2 py-2 text-right text-emerald-300 font-semibold">{s.kWh.toFixed(4)}</td>
+                  <td className="px-2 py-2 text-right text-white font-semibold">{s.wonAmount.toFixed(2)}</td>
+                  <td className="px-2 py-2 text-right text-white/60">{s.ratePerKwh}</td>
+                  <td className="px-2 py-2">
+                    <TxLink txHash={s.txHash} />
                   </td>
                 </tr>
               ))}

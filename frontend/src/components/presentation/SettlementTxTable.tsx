@@ -1,17 +1,22 @@
-import type { EnrichedSettlement } from '../../lib/presentation'
+import type { VerifiedWeeklySettlement } from '../../lib/settlementMatch'
 import { shortAddr } from '../../lib/presentation'
+import OnChainExplainer, { TxLink } from './OnChainExplainer'
 
 interface Props {
   title: string
-  rows: EnrichedSettlement[]
+  rows: VerifiedWeeklySettlement[]
   emptyText?: string
 }
 
-export default function SettlementTxTable({ title, rows, emptyText = '정산 기록 없음' }: Props) {
+export default function SettlementTxTable({ title, rows, emptyText = '검증된 주차별 정산이 없습니다' }: Props) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] flex flex-col h-full min-h-0 overflow-hidden">
-      <div className="px-3 py-2 border-b border-white/10 shrink-0">
+      <div className="px-3 py-2 border-b border-white/10 shrink-0 space-y-2">
         <h4 className="text-sm font-bold text-white">{title}</h4>
+        <p className="text-[10px] text-white/45">
+          이 웹사이트에서 주차별로 정산한 내역만 표시합니다 (계량 kWh + WON 송금 교차 검증).
+        </p>
+        <OnChainExplainer />
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         {rows.length === 0 ? (
@@ -20,39 +25,37 @@ export default function SettlementTxTable({ title, rows, emptyText = '정산 기
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-slate-900/95 text-white/50">
               <tr>
-                <th className="px-2 py-1.5 text-left font-medium">시각</th>
+                <th className="px-2 py-1.5 text-left font-medium">정산 주차</th>
                 <th className="px-2 py-1.5 text-right font-medium">kWh</th>
                 <th className="px-2 py-1.5 text-right font-medium">WON</th>
                 <th className="px-2 py-1.5 text-right font-medium">단가</th>
+                <th className="px-2 py-1.5 text-left font-medium">공급자</th>
                 <th className="px-2 py-1.5 text-left font-medium">Tx</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {rows.map((r) => (
                 <tr key={r.txHash} className="hover:bg-white/5">
-                  <td className="px-2 py-1.5 text-white/70 whitespace-nowrap">
-                    {new Date(r.timestamp * 1000).toLocaleString('ko-KR', {
-                      month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                    })}
+                  <td className="px-2 py-2 text-white font-medium whitespace-nowrap">
+                    {r.weekLabel}
+                    <span className="block text-[9px] text-white/40 font-normal">
+                      {new Date(r.timestamp * 1000).toLocaleString('ko-KR')}
+                    </span>
                   </td>
-                  <td className="px-2 py-1.5 text-right text-emerald-300 font-semibold">
-                    {r.kWh != null ? r.kWh.toFixed(4) : '—'}
+                  <td className="px-2 py-2 text-right text-emerald-300 font-semibold">
+                    {r.kWh.toFixed(4)}
                   </td>
-                  <td className="px-2 py-1.5 text-right text-white font-semibold">
+                  <td className="px-2 py-2 text-right text-white font-semibold">
                     {r.wonAmount.toFixed(2)}
                   </td>
-                  <td className="px-2 py-1.5 text-right text-white/60">
-                    {r.ratePerKwh != null ? `${r.ratePerKwh}` : '—'}
+                  <td className="px-2 py-2 text-right text-white/60">
+                    {r.ratePerKwh} WON/kWh
                   </td>
-                  <td className="px-2 py-1.5">
-                    <a
-                      href={`https://sepolia.arbiscan.io/tx/${r.txHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-violet-300 hover:underline"
-                    >
-                      {shortAddr(r.txHash)}
-                    </a>
+                  <td className="px-2 py-2 font-mono text-white/70">
+                    {shortAddr(r.supplierWallet)}
+                  </td>
+                  <td className="px-2 py-2">
+                    <TxLink txHash={r.txHash} />
                   </td>
                 </tr>
               ))}
