@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import type { EnergyReading, SettlementTransfer } from '../hooks/useEnergyData'
 import type { EnergySupplier } from '../hooks/useWallet'
 import { PRESET_SETTLEMENT_RATES } from '../hooks/useWallet'
+import { writeStoredWallet, STORAGE_PAYER_WALLET } from '../lib/presentation'
 import {
   Calendar, Coins, CheckCircle2, Loader2,
   AlertCircle, ChevronLeft, ChevronRight, Clock,
@@ -26,6 +27,7 @@ interface Props {
   isWalletConnected: boolean
   supplier: EnergySupplier
   payerWallets?: string[]
+  connectedWallet?: string | null
   onTransfer: (amountKwh: number, supplierWallet: string, rate: number) => Promise<string>
   onSettlementDone: () => void
 }
@@ -119,10 +121,10 @@ function matchSettlementsToWeeks(
   extraRates: number[],
 ): Record<number, { txHash: string; wonAmount: number; to: string }> {
   const matched: Record<number, { txHash: string; wonAmount: number; to: string }> = {}
-  if (!settlements.length || !payerWallets.length) return matched
+  if (!settlements.length) return matched
 
-  const payerSet = new Set(payerWallets.map(w => w.toLowerCase()))
-  const eligible = settlements.filter(s => payerSet.has(s.from.toLowerCase()))
+  // API가 계량 kWh 기준 검증한 송금 포함 — MetaMask 미연결 시에도 정산됨 표시
+  const eligible = settlements
 
   const weeksSorted = [...weeks]
     .filter(w => !w.isCurrent)
@@ -165,7 +167,7 @@ function matchSettlementsToWeeks(
 }
 
 export default function WeeklySettlement({
-  readings, settlements, isWalletConnected, supplier, payerWallets = [], onTransfer, onSettlementDone,
+  readings, settlements, isWalletConnected, supplier, payerWallets = [], connectedWallet, onTransfer, onSettlementDone,
 }: Props) {
   const [justSettled, setJustSettled] = useState<Record<number, string>>({})
   const [settling, setSettling] = useState<number | null>(null)
@@ -224,6 +226,7 @@ export default function WeeklySettlement({
     setError(null)
     try {
       const txHash = await onTransfer(week.totalKWh, supplier.wallet, supplier.rate)
+      if (connectedWallet) writeStoredWallet(STORAGE_PAYER_WALLET, connectedWallet)
       setJustSettled(prev => ({ ...prev, [week.weekIndex]: txHash }))
       onSettlementDone()
     } catch (err: any) {

@@ -5,6 +5,7 @@ export { getCalendarWeekDays, formatDayLabel } from './settlementMatch'
 
 export const STORAGE_CONSUMER_WALLET = 'emeter:consumer-wallet'
 export const STORAGE_PRODUCER_WALLET = 'emeter:producer-wallet'
+export const STORAGE_PAYER_WALLET = 'emeter:payer-wallet'
 export const STORAGE_SUPPLIER_RATE = 'emeter:supplier-rate'
 
 export const DEMO_CONSUMER_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
@@ -42,6 +43,21 @@ export function readStoredSupplierRate(): number[] {
   } catch {
     return []
   }
+}
+
+/** 계량기 지갑 + MetaMask + 저장된 결제 지갑을 모두 정산 조회/매칭에 사용 */
+export function resolvePayerWallets(meterWallet: string, connectedWallet?: string | null): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+
+  for (const w of [meterWallet, connectedWallet, readStoredWallet(STORAGE_PAYER_WALLET, '')]) {
+    if (!w || !/^0x[a-fA-F0-9]{40}$/.test(w)) continue
+    const key = w.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(w)
+  }
+  return out
 }
 
 export function buildDailyHeatmap(readings: EnergyReading[], date: Date): HourCell[] {

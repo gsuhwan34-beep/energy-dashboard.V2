@@ -12,7 +12,7 @@ import TransactionTable from '../components/TransactionTable'
 import WeeklySettlement from '../components/WeeklySettlement'
 import { Zap, Search, AlertCircle } from 'lucide-react'
 import { api } from '../lib/api'
-import { writeStoredWallet, STORAGE_CONSUMER_WALLET, STORAGE_SUPPLIER_RATE } from '../lib/presentation'
+import { writeStoredWallet, STORAGE_CONSUMER_WALLET, STORAGE_SUPPLIER_RATE, STORAGE_PAYER_WALLET, resolvePayerWallets } from '../lib/presentation'
 
 const DEFAULT_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
 
@@ -62,14 +62,15 @@ export default function ConsumerDashboard({ wallet }: Props) {
   const { data, loading, error, refetch } = useEnergyData(activeWallet)
   const { network } = useNetworkStatus()
 
-  const payerWallets = useMemo(() => {
-    const set = new Set<string>()
-    if (/^0x[a-fA-F0-9]{40}$/.test(activeWallet)) set.add(activeWallet)
-    if (wallet.address && /^0x[a-fA-F0-9]{40}$/.test(wallet.address)) set.add(wallet.address)
-    return Array.from(set)
-  }, [activeWallet, wallet.address])
+  const payerWallets = useMemo(
+    () => resolvePayerWallets(activeWallet, wallet.address),
+    [activeWallet, wallet.address],
+  )
 
-  const { data: settlementData, refetch: refetchSettlements } = useConsumerSettlements(payerWallets)
+  // settlements는 useConsumerSettlements(계량 지갑) API 결과 — payerWallets는 조회용
+  const { data: settlementData, refetch: refetchSettlements } = useConsumerSettlements(
+    /^0x[a-fA-F0-9]{40}$/.test(activeWallet) ? [activeWallet] : payerWallets,
+  )
 
   const fetchSupplierPrice = useCallback(async (walletAddress: string) => {
     const normalized = walletAddress.toLowerCase()
@@ -269,6 +270,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
               isWalletConnected={wallet.isConnected && wallet.isCorrectNetwork}
               supplier={supplier}
               payerWallets={payerWallets}
+              connectedWallet={wallet.address}
               onTransfer={wallet.transferWon}
               onSettlementDone={refetchSettlements}
             />

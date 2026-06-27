@@ -87,6 +87,34 @@ async function fetchConsumerReadings(consumerWallet) {
   return readings;
 }
 
+const fs = require('fs');
+const path = require('path');
+const { matchVerifiedProducerSales, findMeterVerifiedTransfers } = require('./lib/settlementMatch');
+
+const SUPPLIER_PRICES_FILE = path.join(__dirname, 'supplier-prices.json');
+let supplierPrices = {};
+
+function loadSupplierPrices() {
+  try {
+    if (fs.existsSync(SUPPLIER_PRICES_FILE)) {
+      supplierPrices = JSON.parse(fs.readFileSync(SUPPLIER_PRICES_FILE, 'utf8'));
+    }
+  } catch (err) {
+    console.warn('Failed to load supplier prices:', err.message);
+    supplierPrices = {};
+  }
+}
+
+function saveSupplierPrices() {
+  try {
+    fs.writeFileSync(SUPPLIER_PRICES_FILE, JSON.stringify(supplierPrices, null, 2));
+  } catch (err) {
+    console.warn('Failed to save supplier prices:', err.message);
+  }
+}
+
+loadSupplierPrices();
+
 // ----------------------------------------------------
 // 1. 핵심 에너지 계량 데이터 API (논스 정렬 및 소수점 보존 포함)
 // ----------------------------------------------------
@@ -179,7 +207,7 @@ app.get('/api/energy/settlements', async (req, res) => {
       });
     }
 
-    // consumer만 있으면: 해당 지갑이 보낸 모든 WON 정산 조회 (공급자 탭과 무관)
+    // consumer만 있으면: 해당 지갑이 보낸 WON + 계량 kWh와 교차 검증된 송금
     if (isValidAddress(consumerParam)) {
       const consumer = ethers.getAddress(consumerParam);
       const fromFilter = wonContract.filters.Transfer(consumer, null);
@@ -191,6 +219,46 @@ app.get('/api/energy/settlements', async (req, res) => {
           continue;
         }
         await pushTransfer(log);
+      }
+
+      // 계량기 주소 기준 kWh 매칭 — MetaMask 송금 지갑이 달라도 정산 인식
+      const readings = await fetchConsumerReadings(consumer);
+      if (readings.length > 0) {
+        const supplierSet = new Set(DEFAULT_SUPPLIERS.map((s) => s.toLowerCase()));
+        Object.keys(supplierPrices).forEach((w) => {
+          if (isValidAddress(w)) supplierSet.add(w.toLowerCase());
+        });
+
+        const candidate = [];
+        const candidateSeen = new Set();
+        for (const supplier of supplierSet) {
+          const toFilter = wonContract.filters.Transfer(null, supplier);
+          const toLogs = await wonContract.queryFilter(toFilter, START_BLOCK, 'latest');
+          for (const log of toLogs) {
+            const txHash = log.transactionHash;
+            if (candidateSeen.has(txHash)) continue;
+            candidateSeen.add(txHash);
+            candidate.push({
+              txHash,
+              blockNumber: log.blockNumber,
+              timestamp: await getBlockTimestamp(log.blockNumber),
+              from: ethers.getAddress(log.args[0]),
+              to: ethers.getAddress(log.args[1]),
+              wonAmount: Number(ethers.formatUnits(log.args[2], 18)),
+            });
+          }
+        }
+
+        const extraRates = Object.values(supplierPrices)
+          .map((p) => Number(p))
+          .filter((n) => Number.isFinite(n) && n > 0);
+
+        const verified = findMeterVerifiedTransfers(readings, candidate, extraRates);
+        for (const t of verified) {
+          if (seenTx.has(t.txHash)) continue;
+          seenTx.add(t.txHash);
+          allTransfers.push(t);
+        }
       }
     } else {
       const suppliers = isValidAddress(supplierParam)
@@ -221,34 +289,6 @@ app.get('/api/energy/settlements', async (req, res) => {
 // ----------------------------------------------------
 // P2P 공급자 단가(호가) 관리 API
 // ----------------------------------------------------
-const fs = require('fs');
-const path = require('path');
-const { matchVerifiedProducerSales } = require('./lib/settlementMatch');
-
-const SUPPLIER_PRICES_FILE = path.join(__dirname, 'supplier-prices.json');
-let supplierPrices = {};
-
-function loadSupplierPrices() {
-  try {
-    if (fs.existsSync(SUPPLIER_PRICES_FILE)) {
-      supplierPrices = JSON.parse(fs.readFileSync(SUPPLIER_PRICES_FILE, 'utf8'));
-    }
-  } catch (err) {
-    console.warn('Failed to load supplier prices:', err.message);
-    supplierPrices = {};
-  }
-}
-
-function saveSupplierPrices() {
-  try {
-    fs.writeFileSync(SUPPLIER_PRICES_FILE, JSON.stringify(supplierPrices, null, 2));
-  } catch (err) {
-    console.warn('Failed to save supplier prices:', err.message);
-  }
-}
-
-loadSupplierPrices();
-
 app.post('/api/supplier/price', (req, res) => {
   const { wallet, price } = req.body;
   if (!isValidAddress(wallet) || price === undefined || Number.isNaN(Number(price))) {

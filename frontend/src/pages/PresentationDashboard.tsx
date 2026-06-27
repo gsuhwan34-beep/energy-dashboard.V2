@@ -12,6 +12,7 @@ import {
   STORAGE_PRODUCER_WALLET,
   readStoredWallet,
   readStoredSupplierRate,
+  resolvePayerWallets,
   toDateInputValue,
   shortAddr,
   getCalendarWeekDays,
@@ -56,6 +57,11 @@ export default function PresentationDashboard({ wallet }: Props) {
     }
   }, [wallet.address])
 
+  const payerWallets = useMemo(
+    () => resolvePayerWallets(consumerWallet, wallet.address),
+    [consumerWallet, wallet.address],
+  )
+
   const dateObj = useMemo(() => {
     const [y, m, d] = selectedDate.split('-').map(Number)
     return new Date(y, m - 1, d)
@@ -70,7 +76,7 @@ export default function PresentationDashboard({ wallet }: Props) {
   const { data: consumerData } = useEnergyData(consumerWallet)
   const { data: producerData } = useProducerData(producerWallet)
   const { data: settlementData } = useConsumerSettlements(
-    /^0x[a-fA-F0-9]{40}$/.test(consumerWallet) ? [consumerWallet] : [],
+    /^0x[a-fA-F0-9]{40}$/.test(consumerWallet) ? [consumerWallet] : payerWallets,
   )
 
   const consumerReadings = consumerData?.readings ?? []
@@ -82,10 +88,10 @@ export default function PresentationDashboard({ wallet }: Props) {
       matchVerifiedWeeklySettlements(
         consumerReadings,
         settlementData?.transfers ?? [],
-        consumerWallet,
+        payerWallets,
         extraRates,
       ),
-    [consumerReadings, settlementData?.transfers, consumerWallet, extraRates],
+    [consumerReadings, settlementData?.transfers, payerWallets, extraRates],
   )
 
   const overview = producerData?.overview
@@ -151,17 +157,25 @@ export default function PresentationDashboard({ wallet }: Props) {
           )}
 
           {subTab === 'consumer' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full min-h-0">
-              <MeterTxTable
-                title="온체인 계량 기록"
-                readings={consumerReadings}
-                emptyText="소비자 탭에서 계량기를 조회해 주세요"
-              />
-              <SettlementTxTable
-                title="주차별 P2P 정산 내역"
-                rows={verifiedSettlements}
-                emptyText="검증된 주차별 정산이 없습니다. 소비자 탭에서 주차 정산을 완료해 주세요."
-              />
+            <div className="flex flex-col h-full min-h-0 gap-2">
+              <p className="text-[10px] text-white/45 shrink-0">
+                계량 {shortAddr(consumerWallet)}
+                {payerWallets.length > 1 && (
+                  <> · 정산 지갑 {payerWallets.map(shortAddr).join(', ')}</>
+                )}
+              </p>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0">
+                <MeterTxTable
+                  title="온체인 계량 기록"
+                  readings={consumerReadings}
+                  emptyText="소비자 탭에서 계량기를 조회해 주세요"
+                />
+                <SettlementTxTable
+                  title="주차별 P2P 정산 내역"
+                  rows={verifiedSettlements}
+                  emptyText="검증된 주차별 정산이 없습니다. 소비자 탭에서 주차 정산을 완료해 주세요."
+                />
+              </div>
             </div>
           )}
 

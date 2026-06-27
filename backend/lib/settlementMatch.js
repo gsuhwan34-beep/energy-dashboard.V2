@@ -157,8 +157,53 @@ function matchVerifiedProducerSales(producerWallet, inboundTransfers, consumerRe
   return verifiedSales;
 }
 
+/**
+ * 계량기 지갑의 주차별 kWh와 금액·시각이 맞는 WON 송금을 찾음.
+ * 송금 지갑(from)이 계량 지갑과 달라도 매칭 (태블릿·프레젠테이션용).
+ */
+function findMeterVerifiedTransfers(readings, candidateTransfers, extraRates = []) {
+  if (!readings?.length || !candidateTransfers?.length) return [];
+
+  const weeks = groupReadingsByWeek(readings)
+    .filter((w) => !w.isCurrent && w.totalKWh > 0)
+    .sort((a, b) => a.weekIndex - b.weekIndex);
+
+  const usedTx = new Set();
+  const matched = [];
+
+  for (const week of weeks) {
+    const weekStartTs = Math.floor(week.start.getTime() / 1000);
+    const weekEndTs = Math.floor(week.end.getTime() / 1000);
+
+    let best = null;
+    let bestScore = Infinity;
+
+    for (const t of candidateTransfers) {
+      if (usedTx.has(t.txHash)) continue;
+      if (t.timestamp < weekStartTs) continue;
+
+      const check = paymentMatchesWeekEnergy(week.totalKWh, t.wonAmount, extraRates);
+      if (!check.matched) continue;
+
+      const score = Math.abs(t.timestamp - weekEndTs);
+      if (score < bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+
+    if (best) {
+      matched.push(best);
+      usedTx.add(best.txHash);
+    }
+  }
+
+  return matched;
+}
+
 module.exports = {
   matchVerifiedProducerSales,
+  findMeterVerifiedTransfers,
   groupReadingsByWeek,
   getWeekIndex,
 };

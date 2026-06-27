@@ -107,13 +107,14 @@ export function buildWeekRowsFromReadings(readings: EnergyReading[]): WeekRow[] 
 export function matchVerifiedWeeklySettlements(
   readings: EnergyReading[],
   transfers: SettlementTransfer[],
-  consumerWallet: string,
+  payerWallets: string[],
   extraRates: number[] = [],
 ): VerifiedWeeklySettlement[] {
-  if (!consumerWallet || !/^0x[a-fA-F0-9]{40}$/.test(consumerWallet)) return []
+  const validPayers = payerWallets.filter((w) => /^0x[a-fA-F0-9]{40}$/.test(w))
+  if (!validPayers.length && !transfers.length) return []
 
-  const consumerLower = consumerWallet.toLowerCase()
-  const eligible = transfers.filter((t) => t.from.toLowerCase() === consumerLower)
+  // API가 계량 kWh 기준으로 검증한 송금 포함 — from 지갑과 계량 지갑이 달라도 매칭
+  const eligible = transfers
 
   const weeks = buildWeekRowsFromReadings(readings)
     .filter((w) => !w.isCurrent && w.totalKWh > 0)

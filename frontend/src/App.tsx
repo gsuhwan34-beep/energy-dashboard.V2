@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { writeStoredWallet, STORAGE_PAYER_WALLET } from '../lib/presentation'
 import { useWallet } from './hooks/useWallet'
 import WalletButton from './components/WalletButton'
 import RoleTabs, { type AppRole } from './components/RoleTabs'
@@ -17,6 +18,10 @@ export default function App() {
   const [role, setRole] = useState<AppRole>('presentation')
   const wallet = useWallet()
   const isPresentation = role === 'presentation'
+
+  useEffect(() => {
+    if (wallet.address) writeStoredWallet(STORAGE_PAYER_WALLET, wallet.address)
+  }, [wallet.address])
 
   return (
     <div className={`min-h-screen ${isPresentation ? 'bg-slate-950' : 'bg-bg-chat'}`}>
