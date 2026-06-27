@@ -329,3 +329,16 @@ div[class*="surf-badge"] {
   overflow: hidden !important;
   z-index: -9999 !important;
 }
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 40s linear infinite;
+}
+
+.presentation-mode {
+  touch-action: manipulation;
+}

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
 import type { EnergyReading } from './useEnergyData'
-import type { SettlementTransfer } from './useEnergyData'
 
 export interface ProducerOverview {
   totalReadings: number
@@ -12,8 +11,26 @@ export interface ProducerOverview {
   soldWh: number
   availableKWh: number
   availableWh: number
+  verifiedSaleCount: number
+  rawInboundCount: number
   firstProduction: EnergyReading | null
   lastProduction: EnergyReading | null
+}
+
+export interface VerifiedProducerSale {
+  txHash: string
+  blockNumber: number
+  timestamp: number
+  from: string
+  to: string
+  wonAmount: number
+  kWh: number
+  wh: number
+  weekIndex: number
+  weekLabel: string
+  ratePerKwh: number
+  meterReadingCount: number
+  verified: boolean
 }
 
 export interface ProducerResponse {
@@ -26,7 +43,7 @@ export interface ProducerResponse {
   ratePerKwh: number
   overview: ProducerOverview
   productions: EnergyReading[]
-  sales: SettlementTransfer[]
+  sales: VerifiedProducerSale[]
 }
 
 export function useProducerData(wallet: string) {

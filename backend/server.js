@@ -61,6 +61,32 @@ function normalizePowerValue(powerValue, timestamp) {
   return value;
 }
 
+async function fetchConsumerReadings(consumerWallet) {
+  const filter = meterContract.filters.EnergyDataRecorded(consumerWallet);
+  const logs = await meterContract.queryFilter(filter, START_BLOCK, 'latest');
+
+  const readings = logs.map((log) => {
+    const timestamp = Number(log.args[2]);
+    const powerValue = normalizePowerValue(log.args[1], timestamp);
+    return {
+      txHash: log.transactionHash,
+      blockNumber: log.blockNumber,
+      logIndex: log.index,
+      wh: Number(powerValue.toFixed(4)),
+      kWh: Number((powerValue / 1000).toFixed(6)),
+      timestamp,
+      date: new Date(timestamp * 1000).toISOString(),
+    };
+  });
+
+  readings.sort((a, b) => {
+    if (a.blockNumber !== b.blockNumber) return a.blockNumber - b.blockNumber;
+    return a.logIndex - b.logIndex;
+  });
+
+  return readings;
+}
+
 // ----------------------------------------------------
 // 1. 핵심 에너지 계량 데이터 API (논스 정렬 및 소수점 보존 포함)
 // ----------------------------------------------------
@@ -197,6 +223,7 @@ app.get('/api/energy/settlements', async (req, res) => {
 // ----------------------------------------------------
 const fs = require('fs');
 const path = require('path');
+const { matchVerifiedProducerSales } = require('./lib/settlementMatch');
 
 const SUPPLIER_PRICES_FILE = path.join(__dirname, 'supplier-prices.json');
 let supplierPrices = {};
@@ -283,11 +310,11 @@ app.get('/api/producer', async (req, res) => {
 
     const inboundFilter = wonContract.filters.Transfer(null, producer);
     const inboundLogs = await wonContract.queryFilter(inboundFilter, START_BLOCK, 'latest');
-    const sales = [];
+    const allInbound = [];
 
     for (const log of inboundLogs) {
       if (log.args[0] === ethers.ZeroAddress) continue;
-      sales.push({
+      allInbound.push({
         txHash: log.transactionHash,
         blockNumber: log.blockNumber,
         timestamp: await getBlockTimestamp(log.blockNumber),
@@ -297,14 +324,27 @@ app.get('/api/producer', async (req, res) => {
       });
     }
 
-    sales.sort((a, b) => a.timestamp - b.timestamp);
-    const totalWonReceived = Number(sales.reduce((sum, s) => sum + s.wonAmount, 0).toFixed(6));
     const ratePerKwh = supplierPrices[producer.toLowerCase()] !== undefined
       ? supplierPrices[producer.toLowerCase()]
       : 150;
-    const soldKWh = ratePerKwh > 0
-      ? Number((totalWonReceived / ratePerKwh).toFixed(6))
-      : 0;
+
+    const uniqueConsumers = [...new Set(allInbound.map((t) => t.from.toLowerCase()))];
+    const consumerReadingsMap = {};
+    await Promise.all(
+      uniqueConsumers.map(async (consumerLower) => {
+        try {
+          const readings = await fetchConsumerReadings(consumerLower);
+          consumerReadingsMap[consumerLower] = readings;
+        } catch {
+          consumerReadingsMap[consumerLower] = [];
+        }
+      }),
+    );
+
+    const sales = matchVerifiedProducerSales(producer, allInbound, consumerReadingsMap, ratePerKwh);
+
+    const totalWonReceived = Number(sales.reduce((sum, s) => sum + s.wonAmount, 0).toFixed(6));
+    const soldKWh = Number(sales.reduce((sum, s) => sum + s.kWh, 0).toFixed(6));
     const availableKWh = Math.max(0, Number((totalProductionKWh - soldKWh).toFixed(6)));
 
     const currentBlock = await provider.getBlockNumber();
@@ -326,6 +366,8 @@ app.get('/api/producer', async (req, res) => {
         soldWh: Number((soldKWh * 1000).toFixed(4)),
         availableKWh,
         availableWh: Number((availableKWh * 1000).toFixed(4)),
+        verifiedSaleCount: sales.length,
+        rawInboundCount: allInbound.length,
         firstProduction: productions.length > 0 ? productions[0] : null,
         lastProduction: productions.length > 0 ? productions[productions.length - 1] : null,
       },

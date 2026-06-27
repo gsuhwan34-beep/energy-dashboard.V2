@@ -1,15 +1,21 @@
-import type { SettlementTransfer } from '../hooks/useEnergyData'
+import type { VerifiedProducerSale } from '../hooks/useProducerData'
 
 interface Props {
-  sales: SettlementTransfer[]
-  ratePerKwh: number
+  sales: VerifiedProducerSale[]
+  verifiedCount: number
+  rawInboundCount: number
 }
 
-export default function ProducerSalesTable({ sales, ratePerKwh }: Props) {
+export default function ProducerSalesTable({ sales, verifiedCount, rawInboundCount }: Props) {
   if (!sales.length) {
     return (
       <div className="border border-border-strong rounded-lg bg-bg-base-opaque px-4 py-8 text-center text-xs text-fg-muted">
-        아직 판매(정산) 내역이 없습니다.
+        <p>검증된 P2P 정산 내역이 없습니다.</p>
+        {rawInboundCount > 0 && (
+          <p className="mt-2 text-tag-orange-100">
+            WON 수신 {rawInboundCount}건 중 계량 데이터와 매칭된 정산이 없습니다.
+          </p>
+        )}
       </div>
     )
   }
@@ -19,50 +25,64 @@ export default function ProducerSalesTable({ sales, ratePerKwh }: Props) {
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque overflow-hidden">
       <div className="px-4 py-3 border-b border-border-base">
-        <h3 className="text-sm font-semibold text-fg-base">판매 내역 (WON 수신)</h3>
-        <p className="text-[10px] text-fg-muted mt-0.5">단가 {ratePerKwh} WON/kWh 기준 역산</p>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-fg-base">검증된 P2P 정산 내역</h3>
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-tag-cyan-10 text-tag-cyan-100">
+            온체인 교차검증
+          </span>
+        </div>
+        <p className="text-[10px] text-fg-muted mt-0.5">
+          소비자 계량(kWh) + WON 송금 + 주차 매칭 · {verifiedCount}건 검증됨
+          {rawInboundCount > verifiedCount && ` (미매칭 WON ${rawInboundCount - verifiedCount}건 제외)`}
+        </p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border-base bg-bg-subtle/50 text-fg-muted text-left">
+              <th className="px-4 py-2 font-medium">정산 주차</th>
               <th className="px-4 py-2 font-medium">일시</th>
-              <th className="px-4 py-2 font-medium">구매자</th>
-              <th className="px-4 py-2 font-medium text-right">수신 WON</th>
-              <th className="px-4 py-2 font-medium text-right">≈ kWh</th>
+              <th className="px-4 py-2 font-medium">구매자(계량기)</th>
+              <th className="px-4 py-2 font-medium text-right">계량 kWh</th>
+              <th className="px-4 py-2 font-medium text-right">정산 WON</th>
+              <th className="px-4 py-2 font-medium text-right">단가</th>
               <th className="px-4 py-2 font-medium">Tx</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-base">
-            {sorted.map((sale) => {
-              const estKwh = ratePerKwh > 0 ? sale.wonAmount / ratePerKwh : 0
-              return (
-                <tr key={sale.txHash} className="hover:bg-bg-subtle/30">
-                  <td className="px-4 py-2.5 text-fg-subtle whitespace-nowrap">
-                    {new Date(sale.timestamp * 1000).toLocaleString('ko-KR')}
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-fg-base">
-                    {shortAddr(sale.from)}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-semibold text-fg-base">
-                    {sale.wonAmount.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-brand-100 font-medium">
-                    {estKwh.toFixed(4)}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <a
-                      href={`https://sepolia.arbiscan.io/tx/${sale.txHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-brand-100 hover:underline"
-                    >
-                      보기
-                    </a>
-                  </td>
-                </tr>
-              )
-            })}
+            {sorted.map((sale) => (
+              <tr key={sale.txHash} className="hover:bg-bg-subtle/30">
+                <td className="px-4 py-2.5 text-fg-base font-medium whitespace-nowrap">
+                  {sale.weekLabel}
+                  <span className="block text-[9px] text-fg-muted font-normal">{sale.meterReadingCount}회 계량</span>
+                </td>
+                <td className="px-4 py-2.5 text-fg-subtle whitespace-nowrap">
+                  {new Date(sale.timestamp * 1000).toLocaleString('ko-KR')}
+                </td>
+                <td className="px-4 py-2.5 font-mono text-fg-base">
+                  {shortAddr(sale.from)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-semibold text-brand-100">
+                  {sale.kWh.toFixed(4)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-semibold text-fg-base">
+                  {sale.wonAmount.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}
+                </td>
+                <td className="px-4 py-2.5 text-right text-fg-subtle">
+                  {sale.ratePerKwh} WON/kWh
+                </td>
+                <td className="px-4 py-2.5">
+                  <a
+                    href={`https://sepolia.arbiscan.io/tx/${sale.txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-100 hover:underline"
+                  >
+                    보기
+                  </a>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

@@ -184,7 +184,7 @@ export default function ProducerDashboard({ wallet }: Props) {
             <StatCard
               label="판매 완료량"
               value={`${overview?.soldKWh.toFixed(4) ?? 0} kWh`}
-              sub={`${overview?.totalWonReceived.toLocaleString('ko-KR', { maximumFractionDigits: 2 }) ?? 0} WON 수신 · ${data.ratePerKwh} WON/kWh`}
+              sub={`검증된 정산 ${overview?.verifiedSaleCount ?? 0}건 · ${overview?.totalWonReceived.toLocaleString('ko-KR', { maximumFractionDigits: 2 }) ?? 0} WON`}
             />
             <StatCard
               label="판매 가능 잔여량"
@@ -206,7 +206,11 @@ export default function ProducerDashboard({ wallet }: Props) {
           </div>
 
           <div className="mb-4">
-            <ProducerSalesTable sales={data.sales} ratePerKwh={data.ratePerKwh} />
+            <ProducerSalesTable
+              sales={data.sales}
+              verifiedCount={overview?.verifiedSaleCount ?? 0}
+              rawInboundCount={overview?.rawInboundCount ?? 0}
+            />
           </div>
 
           <TransactionTable readings={productions} />
