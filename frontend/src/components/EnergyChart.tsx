@@ -1,12 +1,18 @@
-import { useState, useMemo } from 'react'
-import { Calendar } from 'lucide-react'
+import { useState, useMemo, useCallback } from 'react'
 import ReactECharts from 'echarts-for-react'
 import type { EnergyReading } from '../hooks/useEnergyData'
+import ChartPeriodCalendar, { PeriodTabButton } from './ChartPeriodCalendar'
 import {
-  getCalendarWeekDays,
-  formatDayLabel,
-  toDateInputValue,
-} from '../lib/presentation'
+  type ChartPeriodMode,
+  aggregateDay7Week,
+  aggregateWeek8,
+  aggregateMonthDaily,
+  aggregateYear12,
+  aggregateTxPerReading,
+  getPeriodSubtitle,
+  snapAnchorForMode,
+  getWeekMonday,
+} from '../lib/chartAggregation'
 
 interface Props {
   readings: EnergyReading[]
@@ -16,9 +22,17 @@ interface Props {
 
 type ChartTab = 'individual' | 'cumulative'
 
+const PERIOD_TABS: { key: ChartPeriodMode; label: string }[] = [
+  { key: 'day7', label: '일별' },
+  { key: 'week8', label: '주별' },
+  { key: 'month', label: '월별' },
+  { key: 'year', label: '연별' },
+  { key: 'tx', label: '전송별' },
+]
+
 const CHART_TABS: { key: ChartTab; label: string }[] = [
-  { key: 'individual', label: '일별 전력' },
-  { key: 'cumulative', label: '주간 누적' },
+  { key: 'individual', label: '계량 전력' },
+  { key: 'cumulative', label: '누적 전력량' },
 ]
 
 const tooltipBg = '#fff'
@@ -29,48 +43,65 @@ const axisLabelColor = fgSubtle
 const axisLineColor = '#7a7a7a'
 const splitLineColor = '#f0f0f0'
 
-function aggregateWeekDaily(readings: EnergyReading[], weekDays: Date[]) {
-  return weekDays.map((day) => {
-    const dayStart = new Date(day)
-    dayStart.setHours(0, 0, 0, 0)
-    const dayEnd = new Date(day)
-    dayEnd.setHours(23, 59, 59, 999)
-
-    const inDay = readings.filter((r) => {
-      const t = r.timestamp * 1000
-      return t >= dayStart.getTime() && t <= dayEnd.getTime()
-    })
-
-    const wh = inDay.reduce((s, r) => s + r.wh, 0)
-    const kWh = inDay.reduce((s, r) => s + r.kWh, 0)
-    return { label: formatDayLabel(day), wh, kWh, count: inDay.length }
-  })
-}
-
 export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }: Props) {
-  const [tab, setTab] = useState<ChartTab>('individual')
+  const [periodMode, setPeriodMode] = useState<ChartPeriodMode>('tx')
+  const [chartTab, setChartTab] = useState<ChartTab>('individual')
 
-  const weekDays = useMemo(() => getCalendarWeekDays(anchorDate), [anchorDate])
-  const daily = useMemo(() => aggregateWeekDaily(readings, weekDays), [readings, weekDays])
-  const weekLabel = `${formatDayLabel(weekDays[0])} ~ ${formatDayLabel(weekDays[6])}`
-  const hasData = daily.some((d) => d.wh > 0)
+  const handlePeriodChange = useCallback(
+    (mode: ChartPeriodMode) => {
+      setPeriodMode(mode)
+      onAnchorDateChange(snapAnchorForMode(mode, anchorDate))
+    },
+    [anchorDate, onAnchorDateChange],
+  )
+
+  const buckets = useMemo(() => {
+    switch (periodMode) {
+      case 'day7':
+        return aggregateDay7Week(readings, anchorDate)
+      case 'week8':
+        return aggregateWeek8(readings, getWeekMonday(anchorDate))
+      case 'month':
+        return aggregateMonthDaily(readings, anchorDate)
+      case 'year':
+        return aggregateYear12(readings, anchorDate)
+      case 'tx':
+        return aggregateTxPerReading(readings, anchorDate)
+      default:
+        return []
+    }
+  }, [readings, anchorDate, periodMode])
+
+  const subtitle = useMemo(() => {
+    if (periodMode === 'tx') {
+      const count = buckets.length
+      return `${anchorDate.getFullYear()}년 ${anchorDate.getMonth() + 1}월 ${anchorDate.getDate()}일 · 전송 ${count}건`
+    }
+    return getPeriodSubtitle(periodMode, anchorDate)
+  }, [periodMode, anchorDate, buckets.length])
+
+  const hasData = buckets.some((b) => b.wh > 0 || b.count > 0)
 
   const option = useMemo(() => {
     if (!hasData) return {}
 
-    const labels = daily.map((d) => d.label)
+    const labels = buckets.map((b) => b.label)
+    const barMaxWidth = periodMode === 'tx' ? 24 : periodMode === 'month' ? 12 : 48
 
-    if (tab === 'individual') {
+    if (chartTab === 'individual') {
       return {
-        grid: { left: 56, right: 16, top: 16, bottom: 32 },
+        grid: { left: 56, right: 16, top: 16, bottom: periodMode === 'month' ? 48 : 32 },
         tooltip: makeTooltip((params: any[]) => {
+          const idx = params[0]?.dataIndex ?? 0
+          const b = buckets[idx]
           const header = `<div style="font-weight:600;font-size:12px;color:${fgBase};margin-bottom:4px">${params[0].axisValueLabel}</div>`
           const rows = params
             .map((p: any) => tooltipRow(p.color, p.seriesName, `${p.value} Wh`))
             .join('')
-          return header + rows
+          const extra = b?.count ? `<div style="font-size:11px;color:${fgSubtle};margin-top:4px">${b.count}회 계량</div>` : ''
+          return header + rows + extra
         }),
-        xAxis: makeXAxis(labels),
+        xAxis: makeXAxis(labels, periodMode === 'month' || periodMode === 'tx'),
         yAxis: {
           type: 'value' as const,
           name: 'Wh',
@@ -81,22 +112,22 @@ export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }
           splitLine: { lineStyle: { type: 'dashed' as const, color: splitLineColor } },
         },
         series: [{
-          name: '일별 전력',
+          name: '계량 전력',
           type: 'bar',
-          data: daily.map((d) => Number(d.wh.toFixed(2))),
+          data: buckets.map((b) => b.wh),
           itemStyle: { color: '#fd4b96', borderRadius: [2, 2, 0, 0] },
-          barMaxWidth: 48,
+          barMaxWidth,
         }],
       }
     }
 
-    const cumKwh = daily.reduce<number[]>((acc, d, i) => {
-      acc.push(i === 0 ? d.kWh : +(acc[i - 1] + d.kWh).toFixed(4))
+    const cumKwh = buckets.reduce<number[]>((acc, b, i) => {
+      acc.push(i === 0 ? b.kWh : +(acc[i - 1] + b.kWh).toFixed(4))
       return acc
     }, [])
 
     return {
-      grid: { left: 56, right: 16, top: 16, bottom: 32 },
+      grid: { left: 56, right: 16, top: 16, bottom: periodMode === 'month' ? 48 : 32 },
       tooltip: makeTooltip((params: any[]) => {
         const header = `<div style="font-weight:600;font-size:12px;color:${fgBase};margin-bottom:4px">${params[0].axisValueLabel}</div>`
         const rows = params
@@ -104,7 +135,7 @@ export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }
           .join('')
         return header + rows
       }),
-      xAxis: makeXAxis(labels),
+      xAxis: makeXAxis(labels, periodMode === 'month' || periodMode === 'tx'),
       yAxis: {
         type: 'value' as const,
         name: 'kWh',
@@ -119,68 +150,74 @@ export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }
         type: 'line',
         data: cumKwh,
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: periodMode === 'tx' ? 4 : 6,
         smooth: false,
         lineStyle: { width: 1.5, color: '#6366f1' },
         itemStyle: { color: '#6366f1' },
         areaStyle: { color: 'rgba(99,102,241,0.08)' },
       }],
     }
-  }, [daily, tab, hasData])
+  }, [buckets, chartTab, hasData, periodMode])
 
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-        <div className="flex gap-1">
-          {CHART_TABS.map((t) => (
-            <button
+      <div className="flex flex-col gap-2 mb-3">
+        <div className="flex flex-wrap items-center gap-1">
+          {PERIOD_TABS.map((t) => (
+            <PeriodTabButton
               key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                tab === t.key
-                  ? 'bg-brand-10 text-brand-100'
-                  : 'text-fg-muted hover:text-fg-subtle hover:bg-bg-subtle'
-              }`}
+              active={periodMode === t.key}
+              onClick={() => handlePeriodChange(t.key)}
             >
               {t.label}
-            </button>
+            </PeriodTabButton>
           ))}
         </div>
 
-        <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border-strong bg-bg-subtle text-xs shrink-0">
-          <Calendar className="w-3.5 h-3.5 text-fg-muted" />
-          <input
-            type="date"
-            value={toDateInputValue(anchorDate)}
-            onChange={(e) => {
-              const [y, m, d] = e.target.value.split('-').map(Number)
-              onAnchorDateChange(new Date(y, m - 1, d))
-            }}
-            className="bg-transparent text-fg-base font-medium outline-none [color-scheme:light]"
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex gap-1">
+            {CHART_TABS.map((t) => (
+              <PeriodTabButton
+                key={t.key}
+                active={chartTab === t.key}
+                onClick={() => setChartTab(t.key)}
+              >
+                {t.label}
+              </PeriodTabButton>
+            ))}
+          </div>
+          <ChartPeriodCalendar
+            periodMode={periodMode}
+            value={anchorDate}
+            onChange={onAnchorDateChange}
           />
-        </label>
+        </div>
       </div>
 
-      <p className="text-[10px] text-fg-muted mb-2">{weekLabel} (7일)</p>
+      <p className="text-[10px] text-fg-muted mb-2">{subtitle}</p>
 
       {hasData ? (
-        <ReactECharts option={option} style={{ height: 280 }} opts={{ renderer: 'svg' }} />
+        <ReactECharts option={option} style={{ height: 280 }} opts={{ renderer: 'svg' }} notMerge />
       ) : (
         <div className="h-[280px] flex items-center justify-center text-sm text-fg-muted">
-          선택한 주에 기록된 데이터가 없습니다
+          선택한 기간에 기록된 데이터가 없습니다
         </div>
       )}
     </div>
   )
 }
 
-function makeXAxis(data: string[]) {
+function makeXAxis(data: string[], rotate = false) {
   return {
     type: 'category' as const,
     data,
     axisLine: { show: true, lineStyle: { color: axisLineColor, width: 1 } },
-    axisLabel: { color: axisLabelColor, fontSize: 10 },
+    axisLabel: {
+      color: axisLabelColor,
+      fontSize: 9,
+      rotate: rotate ? 45 : 0,
+      interval: rotate ? 'auto' as const : 0,
+    },
     axisTick: { show: false },
   }
 }
