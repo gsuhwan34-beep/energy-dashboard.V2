@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react'
 import type { NetworkInfo } from '../hooks/useEnergyData'
 import { Globe, Cpu } from 'lucide-react'
+import InfoTooltip, { BLOCKCHAIN_TIPS } from './InfoTooltip'
 
 interface Props {
   wallet: string
@@ -13,17 +15,23 @@ export default function DeviceStatus({ wallet, contract, network, latestBlock }:
 
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
-      {/* 계량기 정보 */}
       <div className="flex items-center gap-2 mb-3">
         <Cpu className="w-4 h-4 text-fg-subtle" />
         <h3 className="text-sm font-semibold text-fg-base">계량기 정보</h3>
       </div>
       <div className="space-y-2 text-xs">
-        <Row label="계량기 주소" value={shortAddr(wallet)} full={wallet} />
-        <Row label="컨트랙트" value={shortAddr(contract)} full={contract} />
+        <Row
+          label={<InfoTooltip label="계량기 주소" tip={BLOCKCHAIN_TIPS.meterAddress} />}
+          value={shortAddr(wallet)}
+          full={wallet}
+        />
+        <Row
+          label={<InfoTooltip label="컨트랙트" tip={BLOCKCHAIN_TIPS.contract} />}
+          value={shortAddr(contract)}
+          full={contract}
+        />
       </div>
 
-      {/* 네트워크 상태 */}
       <div className="border-t border-border-base mt-3 pt-3">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -38,9 +46,15 @@ export default function DeviceStatus({ wallet, contract, network, latestBlock }:
           </span>
         </div>
         <div className="space-y-2 text-xs">
-          <Row label="체인" value={network?.network || 'Arbitrum Sepolia'} />
+          <Row
+            label={<InfoTooltip label="체인" tip={BLOCKCHAIN_TIPS.chain} />}
+            value={network?.network || 'Arbitrum Sepolia'}
+          />
           {(latestBlock || network?.latestBlock) && (
-            <Row label="최신 블록" value={`#${(latestBlock || network?.latestBlock || 0).toLocaleString()}`} />
+            <Row
+              label={<InfoTooltip label="최신 블록" tip={BLOCKCHAIN_TIPS.block} />}
+              value={`#${(latestBlock || network?.latestBlock || 0).toLocaleString()}`}
+            />
           )}
         </div>
       </div>
@@ -48,22 +62,30 @@ export default function DeviceStatus({ wallet, contract, network, latestBlock }:
   )
 }
 
-function Row({ label, value, full }: { label: string; value: string; full?: string }) {
+function Row({
+  label,
+  value,
+  full,
+}: {
+  label: ReactNode
+  value: string
+  full?: string
+}) {
   return (
-    <div className="flex justify-between gap-2">
+    <div className="flex justify-between gap-2 items-start">
       <span className="text-fg-muted shrink-0">{label}</span>
       {full ? (
         <a
           href={`https://sepolia.arbiscan.io/address/${full}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-brand-100 font-mono truncate hover:underline"
+          className="text-brand-100 font-mono truncate hover:underline text-right"
           title={full}
         >
           {value}
         </a>
       ) : (
-        <span className="text-fg-subtle font-mono truncate">{value}</span>
+        <span className="text-fg-subtle font-mono truncate text-right">{value}</span>
       )}
     </div>
   )

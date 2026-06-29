@@ -1,4 +1,6 @@
 import type { VerifiedProducerSale } from '../hooks/useProducerData'
+import OnChainExplainer from './OnChainExplainer'
+import InfoTooltip, { BLOCKCHAIN_TIPS } from './InfoTooltip'
 
 interface Props {
   sales: VerifiedProducerSale[]
@@ -24,17 +26,18 @@ export default function ProducerSalesTable({ sales, verifiedCount, rawInboundCou
 
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque overflow-hidden">
-      <div className="px-4 py-3 border-b border-border-base">
+      <div className="px-4 py-3 border-b border-border-base space-y-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-fg-base">검증된 P2P 정산 내역</h3>
           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-tag-cyan-10 text-tag-cyan-100">
             온체인 교차검증
           </span>
         </div>
-        <p className="text-[10px] text-fg-muted mt-0.5">
+        <p className="text-[10px] text-fg-muted">
           소비자 계량(kWh) + WON 송금 + 주차 매칭 · {verifiedCount}건 검증됨
           {rawInboundCount > verifiedCount && ` (미매칭 WON ${rawInboundCount - verifiedCount}건 제외)`}
         </p>
+        <OnChainExplainer variant="light" compact />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
@@ -42,11 +45,19 @@ export default function ProducerSalesTable({ sales, verifiedCount, rawInboundCou
             <tr className="border-b border-border-base bg-bg-subtle/50 text-fg-muted text-left">
               <th className="px-4 py-2 font-medium">정산 주차</th>
               <th className="px-4 py-2 font-medium">일시</th>
-              <th className="px-4 py-2 font-medium">구매자(계량기)</th>
-              <th className="px-4 py-2 font-medium text-right">계량 kWh</th>
-              <th className="px-4 py-2 font-medium text-right">정산 WON</th>
+              <th className="px-4 py-2 font-medium">
+                <InfoTooltip label="구매자(계량기)" tip={BLOCKCHAIN_TIPS.meterAddress} />
+              </th>
+              <th className="px-4 py-2 font-medium text-right">
+                <InfoTooltip label="계량 kWh" tip={BLOCKCHAIN_TIPS.kwh} />
+              </th>
+              <th className="px-4 py-2 font-medium text-right">
+                <InfoTooltip label="정산 WON" tip={BLOCKCHAIN_TIPS.won} />
+              </th>
               <th className="px-4 py-2 font-medium text-right">단가</th>
-              <th className="px-4 py-2 font-medium">Tx</th>
+              <th className="px-4 py-2 font-medium">
+                <InfoTooltip label="Tx" tip={BLOCKCHAIN_TIPS.tx} />
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-base">

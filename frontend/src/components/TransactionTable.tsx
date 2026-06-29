@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import type { EnergyReading } from '../hooks/useEnergyData'
 import { ExternalLink, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import OnChainExplainer from './OnChainExplainer'
+import InfoTooltip, { BLOCKCHAIN_TIPS } from './InfoTooltip'
 
 interface Props {
   readings: EnergyReading[]
@@ -12,7 +14,6 @@ const PAGE_SIZE = 10
 export default function TransactionTable({ readings }: Props) {
   const [page, setPage] = useState(0)
 
-  // 최신순 정렬
   const sorted = useMemo(() => [...readings].reverse(), [readings])
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages - 1)
@@ -29,20 +30,31 @@ export default function TransactionTable({ readings }: Props) {
 
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-fg-base">전송 기록</h3>
-        <span className="text-[10px] text-fg-muted">{readings.length}건</span>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-fg-base">전송 기록</h3>
+          <span className="text-[10px] text-fg-muted">{readings.length}건</span>
+        </div>
+        <OnChainExplainer variant="light" compact />
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border-base text-fg-muted">
-              <th className="text-left py-2 pr-3 font-medium">트랜잭션</th>
+              <th className="text-left py-2 pr-3 font-medium">
+                <InfoTooltip label="트랜잭션" tip={BLOCKCHAIN_TIPS.tx} />
+              </th>
               <th className="text-left py-2 pr-3 font-medium">시간</th>
-              <th className="text-right py-2 pr-3 font-medium">전력량 (Wh)</th>
-              <th className="text-right py-2 pr-3 font-medium">블록</th>
-              <th className="text-center py-2 font-medium">상태</th>
+              <th className="text-right py-2 pr-3 font-medium">
+                <InfoTooltip label="전력량 (Wh)" tip={BLOCKCHAIN_TIPS.wh} />
+              </th>
+              <th className="text-right py-2 pr-3 font-medium">
+                <InfoTooltip label="블록" tip={BLOCKCHAIN_TIPS.block} />
+              </th>
+              <th className="text-center py-2 font-medium">
+                <InfoTooltip label="상태" tip={BLOCKCHAIN_TIPS.status} />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -89,7 +101,6 @@ export default function TransactionTable({ readings }: Props) {
         </table>
       </div>
 
-      {/* 페이지네이션 */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 mt-3 pt-3 border-t border-border-base">
           <button

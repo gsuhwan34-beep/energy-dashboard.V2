@@ -3,6 +3,7 @@ import type { EnergyReading, SettlementTransfer } from '../hooks/useEnergyData'
 import type { EnergySupplier } from '../hooks/useWallet'
 import { PRESET_SETTLEMENT_RATES } from '../hooks/useWallet'
 import { writeStoredWallet, STORAGE_PAYER_WALLET } from '../lib/presentation'
+import OnChainExplainer from './OnChainExplainer'
 import {
   Calendar, Coins, CheckCircle2, Loader2,
   AlertCircle, ChevronLeft, ChevronRight, Clock,
@@ -247,12 +248,15 @@ export default function WeeklySettlement({
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque overflow-hidden">
       {/* 헤더 */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-base">
-        <Coins className="w-4 h-4 text-brand-100" />
-        <h3 className="text-sm font-semibold text-fg-base">주간 정산</h3>
-        <span className="ml-auto text-[10px] text-fg-muted">
-          {supplier.emoji} {supplier.label} · {supplier.rate} WON/kWh · 온체인 검증
-        </span>
+      <div className="flex flex-col gap-2 px-4 py-3 border-b border-border-base">
+        <div className="flex items-center gap-2">
+          <Coins className="w-4 h-4 text-brand-100" />
+          <h3 className="text-sm font-semibold text-fg-base">주간 정산</h3>
+          <span className="ml-auto text-[10px] text-fg-muted">
+            {supplier.emoji} {supplier.label} · {supplier.rate} WON/kWh · 온체인 검증
+          </span>
+        </div>
+        <OnChainExplainer variant="light" compact />
       </div>
 
       {/* 월 선택 */}

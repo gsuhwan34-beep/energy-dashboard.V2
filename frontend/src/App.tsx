@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { writeStoredWallet, STORAGE_PAYER_WALLET } from '../lib/presentation'
 import { useWallet } from './hooks/useWallet'
+import { TooltipProvider } from './components/ui/tooltip'
 import WalletButton from './components/WalletButton'
 import RoleTabs, { type AppRole } from './components/RoleTabs'
 import ConsumerDashboard from './pages/ConsumerDashboard'
@@ -11,7 +12,7 @@ import { Zap, AlertCircle } from 'lucide-react'
 const ROLE_SUBTITLE: Record<AppRole, string> = {
   consumer: '소비자 · 전력 사용 및 P2P 정산',
   producer: '생산자 · 전력 생산 및 판매 관리',
-  presentation: '프레젠테이션',
+  presentation: '프레젠테이션 · 태블릿 시연',
 }
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
   }, [wallet.address])
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className={`min-h-screen ${isPresentation ? 'bg-slate-950' : 'bg-bg-chat'}`}>
       <div className={`mx-auto px-4 py-4 md:py-6 ${isPresentation ? 'max-w-7xl' : 'max-w-6xl'}`}>
         <header className={`flex flex-col gap-4 ${isPresentation ? 'mb-2' : 'mb-6'}`}>
@@ -77,5 +79,6 @@ export default function App() {
         )}
       </div>
     </div>
+    </TooltipProvider>
   )
 }

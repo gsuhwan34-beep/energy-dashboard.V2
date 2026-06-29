@@ -16,6 +16,8 @@ interface Props {
   onAnchorDateChange: (date: Date) => void
 }
 
+const CELL = 'w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0'
+
 export default function DashboardHeatmap({ title, readings, anchorDate, onAnchorDateChange }: Props) {
   const weekDays = useMemo(() => getCalendarWeekDays(anchorDate), [anchorDate])
 
@@ -45,7 +47,7 @@ export default function DashboardHeatmap({ title, readings, anchorDate, onAnchor
             {weekLabel} · 주간 {(weekTotal / 1000).toFixed(4)} kWh
           </p>
         </div>
-        <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border-strong bg-bg-subtle text-xs">
+        <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border-strong bg-bg-subtle text-xs shrink-0">
           <Calendar className="w-3.5 h-3.5 text-fg-muted" />
           <input
             type="date"
@@ -60,10 +62,10 @@ export default function DashboardHeatmap({ title, readings, anchorDate, onAnchor
       </div>
 
       <div className="overflow-x-auto">
-        <div className="min-w-[480px]">
-          <div className="flex gap-0.5 mb-1 pl-12">
+        <div className="inline-block min-w-0 max-w-full">
+          <div className="flex gap-0.5 mb-1 pl-[52px]">
             {Array.from({ length: 24 }, (_, h) => (
-              <div key={h} className="flex-1 min-w-[10px] text-center">
+              <div key={h} className={`${CELL} flex items-end justify-center`}>
                 {h % 6 === 0 && (
                   <span className="text-[8px] text-fg-muted font-mono">{h}</span>
                 )}
@@ -72,16 +74,16 @@ export default function DashboardHeatmap({ title, readings, anchorDate, onAnchor
           </div>
 
           {rows.map((row) => (
-            <div key={row.label} className="flex items-center gap-0.5 mb-0.5">
-              <span className="w-12 text-[9px] text-fg-muted shrink-0 text-right pr-1 truncate">
+            <div key={row.label} className="flex items-center gap-1 mb-0.5">
+              <span className="w-[48px] text-[9px] text-fg-muted shrink-0 text-right pr-1 truncate">
                 {row.label}
               </span>
-              <div className="flex gap-px flex-1">
+              <div className="flex gap-0.5">
                 {row.cells.map((cell) => (
                   <div
                     key={`${row.label}-${cell.hour}`}
                     title={`${row.label} ${cell.hour}시 · ${cell.wh.toFixed(2)} Wh`}
-                    className="flex-1 aspect-square min-w-[8px] max-w-[14px] rounded-sm hover:ring-1 hover:ring-brand-100/50 transition-transform hover:scale-110"
+                    className={`${CELL} rounded-sm hover:ring-1 hover:ring-brand-100/50 transition-transform hover:scale-125`}
                     style={{ backgroundColor: heatmapColor(cell.wh, maxWh) }}
                   />
                 ))}
@@ -93,7 +95,7 @@ export default function DashboardHeatmap({ title, readings, anchorDate, onAnchor
 
       <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border-base">
         <span className="text-[9px] text-fg-muted">낮음</span>
-        <div className="flex gap-0.5 flex-1">
+        <div className="flex gap-0.5 flex-1 max-w-xs">
           {[0, 0.25, 0.5, 0.75, 1].map((t) => (
             <div
               key={t}

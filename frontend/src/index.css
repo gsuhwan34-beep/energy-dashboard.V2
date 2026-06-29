@@ -342,3 +342,22 @@ div[class*="surf-badge"] {
 .presentation-mode {
   touch-action: manipulation;
 }
+
+@keyframes flow-down {
+  0% { top: -12px; opacity: 0; }
+  30% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.05); }
+}
+
+.animate-flow-down {
+  animation: flow-down 2s ease-in-out infinite;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
