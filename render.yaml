@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: energy-dashboard-v2-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: BACKEND_PORT
+        value: "8000"
+    healthCheckPath: /

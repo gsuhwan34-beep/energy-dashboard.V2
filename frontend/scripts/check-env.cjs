@@ -1,15 +1,14 @@
 /**
  * Validates required env vars before running a command.
- * Loads .env manually, checks vars, then execs the actual command.
+ * Loads .env manually, applies CI/Vercel defaults, then execs the command.
  *
- * Build: BASE_PATH (defined, can be empty), BACKEND_PORT
+ * Build: BASE_PATH (can be empty), BACKEND_PORT
  * Dev: PORT, BACKEND_PORT, BASE_PATH
  */
 const fs = require('node:fs')
 const path = require('node:path')
 const { execSync } = require('node:child_process')
 
-// Load .env manually (Vite doesn't load non-VITE_ vars into process.env)
 const envPath = path.join(process.cwd(), '.env')
 if (fs.existsSync(envPath)) {
   for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
@@ -19,27 +18,32 @@ if (fs.existsSync(envPath)) {
     if (eq < 0) continue
     const key = trimmed.slice(0, eq)
     const val = trimmed.slice(eq + 1)
-    if (!process.env[key]) process.env[key] = val
+    if (process.env[key] === undefined) process.env[key] = val
   }
 }
 
-const args = process.argv.slice(2)
-const isBuild = args.some(a => a.includes('build'))
+// Vercel/Render/CI — env 미설정 시 배포가 깨지지 않도록 기본값 적용
+if (process.env.BACKEND_PORT === undefined) {
+  process.env.BACKEND_PORT = '8000'
+}
+if (process.env.BASE_PATH === undefined) {
+  process.env.BASE_PATH = process.env.VERCEL ? '/' : './'
+}
 
-// Vars that must be non-empty
+const args = process.argv.slice(2)
+const isBuild = args.some((a) => a.includes('build'))
+const isDev = args.some((a) => a === 'vite' || a.includes('vite '))
+
 const requiredNonEmpty = isBuild
   ? ['BACKEND_PORT']
-  : ['PORT', 'BACKEND_PORT']
+  : isDev
+    ? ['PORT', 'BACKEND_PORT']
+    : ['BACKEND_PORT']
 
-// Vars that must be defined (empty is ok — BASE_PATH="" means root)
-const requiredDefined = ['BASE_PATH']
+const missingNonEmpty = requiredNonEmpty.filter((k) => !process.env[k])
 
-const missingNonEmpty = requiredNonEmpty.filter(k => !process.env[k])
-const missingDefined = requiredDefined.filter(k => process.env[k] === undefined)
-const missing = [...missingNonEmpty, ...missingDefined]
-
-if (missing.length > 0) {
-  console.error(`\n❌ Missing required env vars: ${missing.join(', ')}`)
+if (missingNonEmpty.length > 0) {
+  console.error(`\n❌ Missing required env vars: ${missingNonEmpty.join(', ')}`)
   console.error(`   Set them in your environment or copy .env.example to .env\n`)
   process.exit(1)
 }

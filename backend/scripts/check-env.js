@@ -1,14 +1,11 @@
 /**
  * Validates required env vars before running a command.
- * Loads .env if it exists (optional convenience), then checks vars.
- *
- * Dev/start: BACKEND_PORT
+ * Loads .env if it exists, applies defaults for Render/CI.
  */
 const fs = require('node:fs')
 const path = require('node:path')
 const { execSync } = require('node:child_process')
 
-// Load .env if it exists (convenience — env vars can come from anywhere)
 const envPath = path.join(process.cwd(), '.env')
 if (fs.existsSync(envPath)) {
   for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
@@ -18,20 +15,21 @@ if (fs.existsSync(envPath)) {
     if (eq < 0) continue
     const key = trimmed.slice(0, eq)
     const val = trimmed.slice(eq + 1)
-    if (!process.env[key]) process.env[key] = val
+    if (process.env[key] === undefined) process.env[key] = val
   }
 }
 
-const args = process.argv.slice(2)
+if (process.env.BACKEND_PORT === undefined) {
+  process.env.BACKEND_PORT = '8000'
+}
 
-// 🔥 여기서 SURF_API_KEY를 지워버렸습니다! 
-// 이제 우리 서버는 BACKEND_PORT(8000) 하나만 있으면 당당하게 켜집니다.
+const args = process.argv.slice(2)
 const required = ['BACKEND_PORT']
-const missing = required.filter(k => !process.env[k])
+const missing = required.filter((k) => !process.env[k])
 
 if (missing.length > 0) {
   console.error(`\n❌ Missing required env vars: ${missing.join(', ')}`)
-  console.error(`   Set them in your environment or copy .env.example to .env\n`)
+  console.error(`   Set them in Render dashboard or copy .env.example to .env\n`)
   process.exit(1)
 }
 

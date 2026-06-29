@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { writeStoredWallet, STORAGE_PAYER_WALLET } from '../lib/presentation'
+import { writeStoredWallet, STORAGE_PAYER_WALLET } from './lib/presentation'
 import { useWallet } from './hooks/useWallet'
 import { TooltipProvider } from './components/ui/tooltip'
 import WalletButton from './components/WalletButton'
