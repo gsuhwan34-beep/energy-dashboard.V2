@@ -4,11 +4,10 @@ import type { EnergyReading } from '../hooks/useEnergyData'
 import ChartPeriodCalendar, { PeriodTabButton } from './ChartPeriodCalendar'
 import {
   type ChartPeriodMode,
-  aggregateDay7Week,
-  aggregateWeek8,
-  aggregateMonthDaily,
-  aggregateYear12,
-  aggregateTxPerReading,
+  aggregateDayTx,
+  aggregateWeek7Days,
+  aggregateMonth8Weeks,
+  aggregateYear12Months,
   getPeriodSubtitle,
   snapAnchorForMode,
   getWeekMonday,
@@ -23,11 +22,10 @@ interface Props {
 type ChartTab = 'individual' | 'cumulative'
 
 const PERIOD_TABS: { key: ChartPeriodMode; label: string }[] = [
-  { key: 'day7', label: '일별' },
-  { key: 'week8', label: '주별' },
+  { key: 'day', label: '일별' },
+  { key: 'week', label: '주별' },
   { key: 'month', label: '월별' },
   { key: 'year', label: '연별' },
-  { key: 'tx', label: '전송별' },
 ]
 
 const CHART_TABS: { key: ChartTab; label: string }[] = [
@@ -44,7 +42,7 @@ const axisLineColor = '#7a7a7a'
 const splitLineColor = '#f0f0f0'
 
 export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }: Props) {
-  const [periodMode, setPeriodMode] = useState<ChartPeriodMode>('tx')
+  const [periodMode, setPeriodMode] = useState<ChartPeriodMode>('day')
   const [chartTab, setChartTab] = useState<ChartTab>('individual')
 
   const handlePeriodChange = useCallback(
@@ -57,40 +55,36 @@ export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }
 
   const buckets = useMemo(() => {
     switch (periodMode) {
-      case 'day7':
-        return aggregateDay7Week(readings, anchorDate)
-      case 'week8':
-        return aggregateWeek8(readings, getWeekMonday(anchorDate))
+      case 'day':
+        return aggregateDayTx(readings, anchorDate)
+      case 'week':
+        return aggregateWeek7Days(readings, anchorDate)
       case 'month':
-        return aggregateMonthDaily(readings, anchorDate)
+        return aggregateMonth8Weeks(readings, getWeekMonday(anchorDate))
       case 'year':
-        return aggregateYear12(readings, anchorDate)
-      case 'tx':
-        return aggregateTxPerReading(readings, anchorDate)
+        return aggregateYear12Months(readings, anchorDate)
       default:
         return []
     }
   }, [readings, anchorDate, periodMode])
 
-  const subtitle = useMemo(() => {
-    if (periodMode === 'tx') {
-      const count = buckets.length
-      return `${anchorDate.getFullYear()}년 ${anchorDate.getMonth() + 1}월 ${anchorDate.getDate()}일 · 전송 ${count}건`
-    }
-    return getPeriodSubtitle(periodMode, anchorDate)
-  }, [periodMode, anchorDate, buckets.length])
+  const subtitle = useMemo(
+    () => getPeriodSubtitle(periodMode, anchorDate, periodMode === 'day' ? buckets.length : undefined),
+    [periodMode, anchorDate, buckets.length],
+  )
 
   const hasData = buckets.some((b) => b.wh > 0 || b.count > 0)
+  const rotateLabels = periodMode === 'day'
 
   const option = useMemo(() => {
     if (!hasData) return {}
 
     const labels = buckets.map((b) => b.label)
-    const barMaxWidth = periodMode === 'tx' ? 24 : periodMode === 'month' ? 12 : 48
+    const barMaxWidth = periodMode === 'day' ? 24 : 48
 
     if (chartTab === 'individual') {
       return {
-        grid: { left: 56, right: 16, top: 16, bottom: periodMode === 'month' ? 48 : 32 },
+        grid: { left: 56, right: 16, top: 16, bottom: rotateLabels ? 48 : 32 },
         tooltip: makeTooltip((params: any[]) => {
           const idx = params[0]?.dataIndex ?? 0
           const b = buckets[idx]
@@ -101,7 +95,7 @@ export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }
           const extra = b?.count ? `<div style="font-size:11px;color:${fgSubtle};margin-top:4px">${b.count}회 계량</div>` : ''
           return header + rows + extra
         }),
-        xAxis: makeXAxis(labels, periodMode === 'month' || periodMode === 'tx'),
+        xAxis: makeXAxis(labels, rotateLabels),
         yAxis: {
           type: 'value' as const,
           name: 'Wh',
@@ -127,7 +121,7 @@ export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }
     }, [])
 
     return {
-      grid: { left: 56, right: 16, top: 16, bottom: periodMode === 'month' ? 48 : 32 },
+      grid: { left: 56, right: 16, top: 16, bottom: rotateLabels ? 48 : 32 },
       tooltip: makeTooltip((params: any[]) => {
         const header = `<div style="font-weight:600;font-size:12px;color:${fgBase};margin-bottom:4px">${params[0].axisValueLabel}</div>`
         const rows = params
@@ -135,7 +129,7 @@ export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }
           .join('')
         return header + rows
       }),
-      xAxis: makeXAxis(labels, periodMode === 'month' || periodMode === 'tx'),
+      xAxis: makeXAxis(labels, rotateLabels),
       yAxis: {
         type: 'value' as const,
         name: 'kWh',
@@ -150,14 +144,14 @@ export default function EnergyChart({ readings, anchorDate, onAnchorDateChange }
         type: 'line',
         data: cumKwh,
         symbol: 'circle',
-        symbolSize: periodMode === 'tx' ? 4 : 6,
+        symbolSize: periodMode === 'day' ? 4 : 6,
         smooth: false,
         lineStyle: { width: 1.5, color: '#6366f1' },
         itemStyle: { color: '#6366f1' },
         areaStyle: { color: 'rgba(99,102,241,0.08)' },
       }],
     }
-  }, [buckets, chartTab, hasData, periodMode])
+  }, [buckets, chartTab, hasData, periodMode, rotateLabels])
 
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">

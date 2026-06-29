@@ -24,10 +24,10 @@ function formatButtonLabel(mode: ChartPeriodMode, date: Date): string {
   const m = date.getMonth() + 1
   const d = date.getDate()
   switch (mode) {
-    case 'week8':
-      return `${y}.${m}.${d} (월)`
+    case 'week':
+      return `${y}.${m}.${d} (월~일)`
     case 'month':
-      return `${y}년 ${m}월`
+      return `${y}년 ${m}월 (8주)`
     case 'year':
       return `${y}년`
     default:
@@ -65,10 +65,10 @@ export default function ChartPeriodCalendar({ periodMode, value, onChange }: Pro
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="end">
         {calMode === 'monday' && (
-          <p className="text-[10px] text-fg-muted px-3 pt-2">월요일만 선택 (주간 시작)</p>
+          <p className="text-[10px] text-fg-muted px-3 pt-2">월요일 선택 → 해당 주 7일</p>
         )}
         {calMode === 'firstMonday' && (
-          <p className="text-[10px] text-fg-muted px-3 pt-2">매월 첫 월요일만 선택</p>
+          <p className="text-[10px] text-fg-muted px-3 pt-2">매월 첫 월요일 선택 → 최근 8주</p>
         )}
         {periodMode === 'year' ? (
           <div className="p-3 space-y-2">
