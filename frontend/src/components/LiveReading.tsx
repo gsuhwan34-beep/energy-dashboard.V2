@@ -22,7 +22,7 @@ export default function LiveReading({ reading, totalReadings }: Props) {
       <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
         <div className="flex items-center gap-2 mb-3">
           <Zap className="w-4 h-4 text-fg-muted" />
-          <h3 className="text-sm font-semibold text-fg-base">최근 계량</h3>
+          <h3 className="text-sm font-semibold text-fg-base">최근 5분 차분</h3>
         </div>
         <p className="text-xs text-fg-muted">아직 기록된 데이터가 없습니다.</p>
       </div>
@@ -33,7 +33,7 @@ export default function LiveReading({ reading, totalReadings }: Props) {
     <div className={`border border-border-strong rounded-lg bg-bg-base-opaque p-4 transition-all duration-300 ${pulse ? 'ring-1 ring-brand-100/40' : ''}`}>
       <div className="flex items-center gap-2 mb-3">
         <Zap className="w-4 h-4 text-brand-100" />
-        <h3 className="text-sm font-semibold text-fg-base">최근 계량</h3>
+        <h3 className="text-sm font-semibold text-fg-base">최근 5분 차분</h3>
         <span className="ml-auto flex items-center gap-1.5">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-tag-cyan-100 opacity-75" />
@@ -44,7 +44,7 @@ export default function LiveReading({ reading, totalReadings }: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Metric label="전력량" value={`${reading.wh} Wh`} />
+        <Metric label="5분 차분" value={`${reading.wh} Wh`} />
         <Metric label="kWh" value={reading.kWh.toFixed(4)} />
         <Metric label="블록 번호" value={`#${reading.blockNumber.toLocaleString()}`} />
         <Metric label="총 전송" value={`${totalReadings}회`} />

@@ -13,6 +13,7 @@ import WeeklySettlement from '../components/WeeklySettlement'
 import { Zap, Search, AlertCircle } from 'lucide-react'
 import { api } from '../lib/api'
 import { writeStoredWallet, STORAGE_CONSUMER_WALLET, STORAGE_SUPPLIER_RATE, STORAGE_PAYER_WALLET, resolvePayerWallets } from '../lib/presentation'
+import { toDeltaReadings, getCumulativeWh, getLatestDeltaReading } from '../lib/readingDelta'
 
 const DEFAULT_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
 
@@ -113,7 +114,10 @@ export default function ConsumerDashboard({ wallet }: Props) {
 
   const overview = data?.overview ?? null
   const readings = data?.readings ?? []
-  const totalKWh = overview?.totalKWh ?? 0
+  const deltaReadings = useMemo(() => toDeltaReadings(readings), [readings])
+  const cumulativeWh = getCumulativeWh(readings)
+  const totalKWh = cumulativeWh / 1000
+  const latestDelta = getLatestDeltaReading(readings)
   const estimatedCost = totalKWh * supplier.rate
 
   function handleSubmit(e: React.FormEvent) {
@@ -229,7 +233,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
       {data && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <StatCard label="총 전력량" value={`${overview?.totalWh ?? 0} Wh`} sub={`${totalKWh.toFixed(4)} kWh`} accent />
+            <StatCard label="누적 전력량" value={`${cumulativeWh.toLocaleString()} Wh`} sub={`${totalKWh.toFixed(4)} kWh`} accent />
             <StatCard
               label="예상 요금"
               value={`${estimatedCost.toLocaleString('ko-KR', { maximumFractionDigits: 3 })}원`}
@@ -237,9 +241,9 @@ export default function ConsumerDashboard({ wallet }: Props) {
             />
             <StatCard label="전송 횟수" value={`${overview?.totalReadings ?? 0}회`} />
             <StatCard
-              label="최근 계량"
-              value={overview?.lastReading ? `${overview.lastReading.wh} Wh` : '-'}
-              sub={overview?.lastReading ? formatTimeAgo(overview.lastReading.timestamp) : '기록 없음'}
+              label="최근 5분 차분"
+              value={latestDelta ? `${latestDelta.wh} Wh` : '-'}
+              sub={latestDelta ? formatTimeAgo(latestDelta.timestamp) : '기록 없음'}
             />
           </div>
 
@@ -249,23 +253,28 @@ export default function ConsumerDashboard({ wallet }: Props) {
                 readings={readings}
                 anchorDate={weekAnchor}
                 onAnchorDateChange={setWeekAnchor}
+                cumulativeBadge={{
+                  label: '누적 전력량',
+                  kWh: totalKWh,
+                  wh: cumulativeWh,
+                }}
               />
               <DashboardHeatmap
                 title="소비 전력 히트맵"
-                readings={readings}
+                readings={deltaReadings}
                 anchorDate={weekAnchor}
                 onAnchorDateChange={setWeekAnchor}
               />
             </div>
             <div className="space-y-4">
-              <LiveReading reading={overview?.lastReading ?? null} totalReadings={overview?.totalReadings ?? 0} />
+              <LiveReading reading={latestDelta} totalReadings={overview?.totalReadings ?? 0} />
               <DeviceStatus wallet={data.wallet} contract={data.contract} network={network} latestBlock={data.latestBlock} />
             </div>
           </div>
 
           <div className="mb-4">
             <WeeklySettlement
-              readings={readings}
+              readings={deltaReadings}
               settlements={settlementData?.transfers ?? []}
               isWalletConnected={wallet.isConnected && wallet.isCorrectNetwork}
               supplier={supplier}
@@ -275,7 +284,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
               onSettlementDone={refetchSettlements}
             />
           </div>
-          <TransactionTable readings={readings} />
+          <TransactionTable readings={deltaReadings} showDeltaLabel />
         </>
       )}
 

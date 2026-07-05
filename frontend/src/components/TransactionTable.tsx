@@ -6,12 +6,13 @@ import InfoTooltip, { BLOCKCHAIN_TIPS } from './InfoTooltip'
 
 interface Props {
   readings: EnergyReading[]
+  showDeltaLabel?: boolean
 }
 
 const EXPLORER = 'https://sepolia.arbiscan.io/tx/'
 const PAGE_SIZE = 10
 
-export default function TransactionTable({ readings }: Props) {
+export default function TransactionTable({ readings, showDeltaLabel }: Props) {
   const [page, setPage] = useState(0)
 
   const sorted = useMemo(() => [...readings].reverse(), [readings])
@@ -47,7 +48,7 @@ export default function TransactionTable({ readings }: Props) {
               </th>
               <th className="text-left py-2 pr-3 font-medium">시간</th>
               <th className="text-right py-2 pr-3 font-medium">
-                <InfoTooltip label="전력량 (Wh)" tip={BLOCKCHAIN_TIPS.wh} />
+                <InfoTooltip label={showDeltaLabel ? '차분 (Wh)' : '전력량 (Wh)'} tip={BLOCKCHAIN_TIPS.wh} />
               </th>
               <th className="text-right py-2 pr-3 font-medium">
                 <InfoTooltip label="블록" tip={BLOCKCHAIN_TIPS.block} />

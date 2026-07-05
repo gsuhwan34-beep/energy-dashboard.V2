@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useProducerData } from '../hooks/useProducerData'
 import { useNetworkStatus } from '../hooks/useEnergyData'
 import type { useWallet } from '../hooks/useWallet'
@@ -11,6 +11,7 @@ import ProducerSalesTable from '../components/ProducerSalesTable'
 import { Sun, RefreshCw, Search, AlertCircle, Save, Wallet, CheckCircle2 } from 'lucide-react'
 import { api } from '../lib/api'
 import { writeStoredWallet, STORAGE_PRODUCER_WALLET, STORAGE_SUPPLIER_RATE } from '../lib/presentation'
+import { toDeltaReadings, getCumulativeWh } from '../lib/readingDelta'
 
 type WalletHook = ReturnType<typeof useWallet>
 
@@ -108,6 +109,11 @@ export default function ProducerDashboard({ wallet }: Props) {
 
   const overview = data?.overview
   const productions = data?.productions ?? []
+  const deltaProductions = useMemo(() => toDeltaReadings(productions), [productions])
+  const totalProductionKWh = getCumulativeWh(productions) / 1000
+  const soldKWh = overview?.soldKWh ?? 0
+  const availableKWh = Math.max(0, Number((totalProductionKWh - soldKWh).toFixed(6)))
+  const availableWh = Number((availableKWh * 1000).toFixed(4))
 
   return (
     <>
@@ -206,19 +212,19 @@ export default function ProducerDashboard({ wallet }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
             <StatCard
               label="총 생산량"
-              value={`${overview?.totalProductionKWh.toFixed(4) ?? 0} kWh`}
-              sub={`${overview?.totalWh.toLocaleString() ?? 0} Wh · ${overview?.totalReadings ?? 0}회 기록`}
+              value={`${totalProductionKWh.toFixed(4)} kWh`}
+              sub={`${getCumulativeWh(productions).toLocaleString()} Wh · ${overview?.totalReadings ?? 0}회 기록`}
               accent
             />
             <StatCard
               label="판매 완료량"
-              value={`${overview?.soldKWh.toFixed(4) ?? 0} kWh`}
+              value={`${soldKWh.toFixed(4)} kWh`}
               sub={`검증된 정산 ${overview?.verifiedSaleCount ?? 0}건 · ${overview?.totalWonReceived.toLocaleString('ko-KR', { maximumFractionDigits: 2 }) ?? 0} WON`}
             />
             <StatCard
               label="판매 가능 잔여량"
-              value={`${overview?.availableKWh.toFixed(4) ?? 0} kWh`}
-              sub={`${overview?.availableWh.toLocaleString() ?? 0} Wh 남음`}
+              value={`${availableKWh.toFixed(4)} kWh`}
+              sub={`${availableWh.toLocaleString()} Wh · 판매 시 감소`}
             />
           </div>
 
@@ -228,10 +234,16 @@ export default function ProducerDashboard({ wallet }: Props) {
                 readings={productions}
                 anchorDate={weekAnchor}
                 onAnchorDateChange={setWeekAnchor}
+                cumulativeBadge={{
+                  label: '판매 가능 잔여',
+                  kWh: availableKWh,
+                  wh: availableWh,
+                  hint: '정산 시 감소',
+                }}
               />
               <DashboardHeatmap
                 title="생산 전력 히트맵"
-                readings={productions}
+                readings={deltaProductions}
                 anchorDate={weekAnchor}
                 onAnchorDateChange={setWeekAnchor}
               />
@@ -252,7 +264,7 @@ export default function ProducerDashboard({ wallet }: Props) {
             />
           </div>
 
-          <TransactionTable readings={productions} />
+          <TransactionTable readings={deltaProductions} showDeltaLabel />
         </>
       )}
 
