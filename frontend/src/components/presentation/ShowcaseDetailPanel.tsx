@@ -1,72 +1,77 @@
-import type { ShowcaseDetailContent, TextSegment } from './showcaseContent'
+import { FileText } from 'lucide-react'
+import type { ShowcaseTab } from './showcaseContent'
+import { ACCENT_STYLES } from './showcaseContent'
 
-function Line({ segments, variant }: { segments: TextSegment[]; variant: 'crisis' | 'innovation' }) {
-  const hi = variant === 'crisis' ? 'text-red-600' : 'text-emerald-700'
+interface SummaryProps {
+  tab: ShowcaseTab
+  onOpenReport: () => void
+}
+
+export function ShowcaseSummaryPanel({ tab, onOpenReport }: SummaryProps) {
+  const accent = ACCENT_STYLES[tab.accent]
+
   return (
-    <p className="text-[11px] md:text-xs text-slate-600 leading-snug">
-      {segments.map((s, i) =>
-        s.highlight ? (
-          <span key={i} className={`${hi} font-bold`}>
-            {s.text}
-          </span>
-        ) : (
-          <span key={i}>{s.text}</span>
-        ),
+    <div className="flex flex-col h-full min-h-0 gap-3">
+      {tab.modalPhoto && (
+        <div className="shrink-0 h-[100px] flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-2">
+          <img
+            src={tab.modalPhoto}
+            alt={tab.imageCaption}
+            className="max-w-full max-h-full object-contain"
+          />
+        </div>
       )}
-    </p>
-  )
-}
 
-function Column({
-  variant,
-  title,
-  items,
-}: {
-  variant: 'crisis' | 'innovation'
-  title: string
-  items: { headline: string; points: TextSegment[][] }[]
-}) {
-  const isCrisis = variant === 'crisis'
-  return (
-    <div
-      className={`flex flex-col rounded-xl border overflow-hidden min-h-0 ${
-        isCrisis ? 'border-red-200 bg-white' : 'border-emerald-200 bg-white'
-      }`}
-    >
-      <div
-        className={`px-3 py-2 shrink-0 flex items-center gap-1.5 text-xs font-bold ${
-          isCrisis ? 'bg-red-50 text-red-800' : 'bg-emerald-50 text-emerald-800'
-        }`}
+      <ul className="flex-1 min-h-0 flex flex-col justify-center gap-3">
+        {tab.summaryBullets.map((bullet, i) => {
+          const Icon = bullet.icon
+          return (
+            <li key={i} className="flex items-start gap-3">
+              <div
+                className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center ${accent.badge}`}
+              >
+                <Icon size={22} strokeWidth={2} />
+              </div>
+              <p className="text-sm text-slate-700 leading-snug pt-2 font-medium">
+                <span className="text-slate-400 mr-1.5">•</span>
+                {bullet.text}
+              </p>
+            </li>
+          )
+        })}
+      </ul>
+
+      <button
+        type="button"
+        onClick={onOpenReport}
+        className={`shrink-0 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm text-white shadow-sm transition-opacity hover:opacity-90 ${accent.bg}`}
       >
-        <span>{isCrisis ? '⚠️' : '✨'}</span>
-        <span className="leading-tight">{title}</span>
-      </div>
-      <div className="p-3 space-y-2.5 flex-1 min-h-0">
-        {items.map((item, i) => (
-          <div key={i}>
-            <p className="text-[11px] md:text-xs font-bold text-slate-900 leading-tight mb-1">{item.headline}</p>
-            {item.points.slice(0, 1).map((line, j) => (
-              <Line key={j} segments={line} variant={variant} />
-            ))}
-          </div>
-        ))}
-      </div>
+        <FileText size={18} />
+        📄 관련 산업 리포트 읽기
+      </button>
     </div>
   )
 }
 
-export function ShowcaseDetailPanel({ detail }: { detail: ShowcaseDetailContent }) {
-  return (
-    <div className="flex flex-col gap-2.5 h-full min-h-0">
-      <div className="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
-        <p className="text-[9px] font-bold text-blue-600 uppercase tracking-wide mb-0.5">핵심 한 줄</p>
-        <p className="text-sm md:text-base font-black text-slate-900 leading-snug">&ldquo;{detail.punchline}&rdquo;</p>
-      </div>
+interface ReportProps {
+  tab: ShowcaseTab
+}
 
-      <div className="grid grid-cols-2 gap-2.5 flex-1 min-h-0">
-        <Column variant="crisis" title={detail.crisisTitle} items={detail.crisisItems} />
-        <Column variant="innovation" title={detail.innovationTitle} items={detail.innovationItems} />
-      </div>
-    </div>
+export function ShowcaseReportPanel({ tab }: ReportProps) {
+  return (
+    <article className="space-y-4">
+      {tab.reportSections.map((section, i) => (
+        <section key={i}>
+          {section.heading && (
+            <h4 className="text-sm font-bold text-slate-900 mb-2">{section.heading}</h4>
+          )}
+          {section.paragraphs.map((p, j) => (
+            <p key={j} className="text-[13px] text-slate-700 leading-[1.85] mb-3 last:mb-0">
+              {p}
+            </p>
+          ))}
+        </section>
+      ))}
+    </article>
   )
 }
