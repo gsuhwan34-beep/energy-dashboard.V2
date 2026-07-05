@@ -7,6 +7,24 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+export interface TextSegment {
+  text: string
+  highlight?: boolean
+}
+
+export interface DetailItem {
+  headline: string
+  points: TextSegment[][]
+}
+
+export interface ShowcaseDetailContent {
+  punchline: string
+  crisisTitle: string
+  crisisItems: DetailItem[]
+  innovationTitle: string
+  innovationItems: DetailItem[]
+}
+
 export interface ShowcaseTab {
   id: number
   icon: LucideIcon
@@ -14,11 +32,12 @@ export interface ShowcaseTab {
   shortDesc: string
   mainImage: string
   slideImage: string
-  /** CBDC 탭: public/image_1d665e.jpg 우선, 없으면 mainImage */
   mainImageLocal?: string
   detailTitle: string
-  detailParagraphs: string[]
+  detail: ShowcaseDetailContent
 }
+
+const seg = (text: string, highlight = false): TextSegment => ({ text, highlight })
 
 export const SHOWCASE_TABS: ShowcaseTab[] = [
   {
@@ -32,10 +51,68 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     slideImage:
       'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=85',
     detailTitle: '단일 장애점(SPOF) 해소 및 스마트 컨트랙트 자동화',
-    detailParagraphs: [
-      '기존 중앙집중형 전력망 시스템은 거대한 \'단일 장애점(SPOF, Single Point of Failure)\' 리스크를 안고 있습니다. 2022년 대한민국을 마비시켰던 \'카카오 판교 데이터센터 화재 사건\'이 이를 명확히 증명합니다. 만약 국가 전력 정산을 담당하는 한전의 중앙 관제 서버가 물리적 화재, 지진, 혹은 북한 등의 사이버 해킹 공격을 받아 다운된다면, 국가 전체의 전력 계량과 요금 정산 시스템이 일거에 마비되는 초유의 사태가 발생합니다.',
-      '저희 MVP 그리드랩은 이더리움 L2(아비트럼) 기반의 퍼블릭 블록체인을 도입하여 이 문제를 완벽히 해결했습니다. 전 세계 수만 대의 컴퓨터(노드)에 데이터가 분산 저장되므로, 99%의 노드가 파괴되어도 나머지 1%가 살아있다면 시스템은 무중단으로 작동합니다. 더불어, 하드웨어 단에서도 전원 코드가 뽑히는 물리적 훼손 시도를 감지하면 \'독립 보조 전원\'이 즉시 개입하여 RAM(휘발성 메모리)에 있는 데이터를 블록체인으로 강제 전송하고 잠가버립니다. 물리적 세계와 디지털 세계 양쪽 모두에서 조작과 마비가 100% 불가능한 \'제로 트러스트(Zero-Trust)\' 방어망을 완성한 것입니다.',
-    ],
+    detail: {
+      punchline: '중앙 서버가 불타도 국가 전력 정산망은 100% 무중단 가동됩니다.',
+      crisisTitle: '현행 시스템의 치명적 위기 (SPOF)',
+      crisisItems: [
+        {
+          headline: '카카오 판교 데이터센터 화재 사건의 재림',
+          points: [
+            [
+              seg('한전 등 거대 중개 기관의 '),
+              seg('중앙 서버', true),
+              seg('가 마비·해킹당하면 '),
+              seg('국가 전체 전력 계량·정산', true),
+              seg('이 일거에 멈추는 독점 구조.'),
+            ],
+          ],
+        },
+        {
+          headline: '물리적 데이터 조작 취약성',
+          points: [
+            [
+              seg('상용 IoT 계량기는 '),
+              seg('SD카드 등 비활성 메모리', true),
+              seg(' 사용 → 기기 분해 후 '),
+              seg('전력 수치 하향 위변조', true),
+              seg('에 방어 불가.'),
+            ],
+          ],
+        },
+      ],
+      innovationTitle: 'MVP 그리드랩의 무신뢰 방어망 (TO-BE)',
+      innovationItems: [
+        {
+          headline: '99%가 파괴되어도 생존하는 블록체인 분산망',
+          points: [
+            [
+              seg('Arbitrum L2 '),
+              seg('글로벌 분산 노드', true),
+              seg('에 데이터 저장 → 중앙 관리자 없이 무결성 검증, '),
+              seg('해킹 원천 차단', true),
+              seg('.'),
+            ],
+          ],
+        },
+        {
+          headline: 'RAM 큐 & 독립 보조 전원 융합',
+          points: [
+            [
+              seg('디스크 미기록 · '),
+              seg('RAM(휘발성 메모리)', true),
+              seg('만 사용해 위변조 차단.'),
+            ],
+            [
+              seg('고의적 '),
+              seg('전원 차단', true),
+              seg(' 시 보조 전원 즉시 개입 → '),
+              seg('온체인 강제 전송·Lock', true),
+              seg(' 구현.'),
+            ],
+          ],
+        },
+      ],
+    },
   },
   {
     id: 1,
@@ -48,10 +125,63 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     slideImage:
       'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=85',
     detailTitle: '중개인 없는 P2P 분산 에너지 직거래',
-    detailParagraphs: [
-      '미래의 에너지 패러다임은 거대 발전소가 에너지를 독점 공급하는 형태에서, 각 가정과 빌딩이 태양광 등을 통해 스스로 전기를 생산하고 소비하는 \'마이크로그리드(분산 에너지) 시대\'로 전환되고 있습니다. 하지만 현재는 내가 생산한 전기를 이웃에게 팔고 싶어도 접근성이 매우 떨어집니다. 한전이나 거대 플랫폼 사업자라는 중개인을 반드시 거쳐야 하며, 이 과정에서 막대한 수수료와 행정 처리 지연이 발생합니다.',
-      '본 시스템은 Web3 지갑(MetaMask)을 연동하여 개개인의 에너지 거래 접근성을 극대화했습니다. 누구나 대시보드에 접속해 자신이 생산한 전력의 단가를 설정하면, 스마트 컨트랙트가 중개인 없이 소비자와 생산자를 1:1로 매칭해 줍니다. 측정된 전력량만큼 수수료 없이 토큰(WON)으로 즉각 결제되므로, 플랫폼 마진으로 빠져나가던 비용이 고스란히 개인(프로슈머)의 수익으로 돌아갑니다. 이는 민간 차원의 신재생 에너지 생산을 폭발적으로 유인하는 가장 강력한 경제적 인센티브 망이 될 것입니다.',
-    ],
+    detail: {
+      punchline: '한전·플랫폼 없이, 이웃과 전력을 1:1 직거래하고 수수료는 Zero(0)입니다.',
+      crisisTitle: '현행 시스템의 치명적 한계 (중개 독점)',
+      crisisItems: [
+        {
+          headline: '마이크로그리드 시대, 접근성은 후퇴',
+          points: [
+            [
+              seg('가정·빌딩이 전력을 '),
+              seg('자가 생산', true),
+              seg('해도 이웃에게 팔려면 '),
+              seg('한전·거대 플랫폼', true),
+              seg('을 반드시 거쳐야 함.'),
+            ],
+          ],
+        },
+        {
+          headline: '수수료·행정 지연이 수익을 잠식',
+          points: [
+            [
+              seg('중개 '),
+              seg('마진·행정 처리 지연', true),
+              seg('으로 프로슈머 실질 수익 감소 → '),
+              seg('민간 신재생 투자', true),
+              seg(' 위축.'),
+            ],
+          ],
+        },
+      ],
+      innovationTitle: 'MVP 그리드랩 P2P 직거래 (TO-BE)',
+      innovationItems: [
+        {
+          headline: 'MetaMask · 스마트 컨트랙트 1:1 매칭',
+          points: [
+            [
+              seg('대시보드에서 '),
+              seg('판매 단가 설정', true),
+              seg(' → 컨트랙트가 '),
+              seg('생산자·소비자 자동 매칭', true),
+              seg('.'),
+            ],
+          ],
+        },
+        {
+          headline: 'WON 토큰 즉시 정산 · 수수료 Zero',
+          points: [
+            [
+              seg('측정 kWh만큼 '),
+              seg('WON 토큰 즉시 송금', true),
+              seg(' → 플랫폼 마진 '),
+              seg('0원', true),
+              seg(', 수익 100% 개인 귀속.'),
+            ],
+          ],
+        },
+      ],
+    },
   },
   {
     id: 2,
@@ -64,10 +194,63 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     slideImage:
       'https://images.unsplash.com/photo-1604594849809-dfedbc827105?auto=format&fit=crop&w=1200&q=85',
     detailTitle: 'RE100 인증 프리패스 (시간/비용 ZERO)',
-    detailParagraphs: [
-      'RE100(기업 사용 전력의 100%를 재생에너지로 충당하자는 글로벌 캠페인)은 이제 단순한 환경 운동이 아니라, 애플, 구글 등 글로벌 빅테크 기업들이 하청업체에 요구하는 \'필수 생존 요건이자 무역 장벽\'이 되었습니다. 하지만 국내 기업들이 RE100을 증명하기 위한 현행 제도는 심각한 모순을 안고 있습니다. 기업이 재생에너지를 사용했음을 증명하려면, 에너지공단의 복잡한 실사를 거쳐 \'신재생에너지 공급인증서(REC)\'를 발급받아야 하며, 이 과정에만 수주에서 수개월의 시간과 막대한 행정 비용, 브로커 수수료가 소모됩니다.',
-      '저희 시스템은 스마트 컨트랙트가 그 자체로 \'감사관\' 역할을 수행합니다. 엣지 디바이스에서 계측된 태양광 전력 생산량은 그 즉시 위변조가 불가능한 블록체인에 영구 기록됩니다. 중간에 사람이 개입하여 숫자를 조작할 틈이 없기 때문에, 이 \'온체인(On-chain) 데이터\' 자체가 누구도 반박할 수 없는 완벽한 \'녹색 전력 생산 증명서\'가 됩니다. 수개월이 걸리던 서류 심사와 감사 비용이 블록체인 코드 한 줄로 인해 \'제로(0)\'로 수렴하는 혁신입니다.',
-    ],
+    detail: {
+      punchline: '수개월 REC 서류 대신, 계측 즉시 온체인 = 녹색 전력 증명서 완성.',
+      crisisTitle: '현행 RE100의 모순 (시간·비용 지옥)',
+      crisisItems: [
+        {
+          headline: '글로벌 빅테크의 필수 무역 장벽',
+          points: [
+            [
+              seg('애플·구글 등 '),
+              seg('RE100', true),
+              seg('은 하청업체 '),
+              seg('생존 요건', true),
+              seg(' — 증명 못 하면 거래 탈락.'),
+            ],
+          ],
+        },
+        {
+          headline: '수주~수개월 실사 · REC · 브로커 비용',
+          points: [
+            [
+              seg('에너지공단 '),
+              seg('복잡한 실사', true),
+              seg(' → REC 발급 → '),
+              seg('브로커 수수료', true),
+              seg(' · 그린워싱 검증 지연.'),
+            ],
+          ],
+        },
+      ],
+      innovationTitle: 'MVP 그리드랩 온체인 감사관 (TO-BE)',
+      innovationItems: [
+        {
+          headline: '스마트 컨트랙트 = 24시간 감사관',
+          points: [
+            [
+              seg('태양광 계측량 '),
+              seg('즉시 블록체인 영구 기록', true),
+              seg(' → 사람 개입·숫자 조작 '),
+              seg('불가', true),
+              seg('.'),
+            ],
+          ],
+        },
+        {
+          headline: '온체인 데이터 = 완벽한 녹색 증명서',
+          points: [
+            [
+              seg('수개월 서류·감사 비용 → '),
+              seg('Zero(0)', true),
+              seg(' · '),
+              seg('On-chain 데이터', true),
+              seg(' 자체가 RE100 증명.'),
+            ],
+          ],
+        },
+      ],
+    },
   },
   {
     id: 3,
@@ -80,10 +263,66 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     slideImage:
       'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=85',
     detailTitle: '고품질 전력 데이터의 자산화 (Data Capitalization)',
-    detailParagraphs: [
-      '초거대 AI 시대를 맞아 하이퍼스케일 데이터센터가 폭증하면서, \'전력\'은 단순한 소모재를 넘어 국가의 명운을 가르는 가장 핵심적인 전략 자산으로 격상되었습니다. 이러한 전력을 효율적으로 통제하려면 AI를 활용한 범국가적 단위의 전력 수요 예측과 관리가 필수적입니다. 하지만 기존의 전력 데이터는 각 기관에 파편화(Silo)되어 있고, 측정 주기가 길며, 인위적인 조작 가능성이 섞여 있어 AI 학습용 데이터로 쓰기에 품질이 현저히 떨어집니다.',
-      '저희가 블록체인에 영구 박제한 데이터는 다릅니다. 초 단위로 계측되고 100% 무결성이 검증된 \'오염되지 않은 오라클(Oracle) 데이터\'입니다. 이 고품질 데이터는 스마트 시티의 발전량 밸런싱, 피크 타임 수요 예측 등 초대형 AI 모델을 학습시키는 데 없어서는 안 될 엄청난 부가가치를 지닌 원유(Raw Material)가 됩니다. 우리는 전력 계량기를 고차원적인 \'데이터 자산 생산 기지\'로 탈바꿈시켰습니다.',
-    ],
+    detail: {
+      punchline: '온체인 오라클 데이터 → AI 학습 → 범국가적 전력망 최적화.',
+      crisisTitle: '현행 전력 데이터의 한계 (AI 학습 부적합)',
+      crisisItems: [
+        {
+          headline: '전력 = 국가 전략 자산, 데이터는 낙후',
+          points: [
+            [
+              seg('하이퍼스케일 DC 시대 — '),
+              seg('AI 전력 수요 예측', true),
+              seg(' 없이는 국가 경쟁력 붕괴.'),
+            ],
+          ],
+        },
+        {
+          headline: 'Silo · 장주기 · 조작 가능성',
+          points: [
+            [
+              seg('기관별 '),
+              seg('파편화(Silo)', true),
+              seg(', 측정 주기 김, '),
+              seg('인위적 조작', true),
+              seg(' 혼재 → AI 원유로 부적합.'),
+            ],
+          ],
+        },
+      ],
+      innovationTitle: 'MVP 그리드랩 데이터 자산 (TO-BE)',
+      innovationItems: [
+        {
+          headline: '100% 무결성 오라클(Oracle) 데이터',
+          points: [
+            [
+              seg('초 단위 계측 · '),
+              seg('블록체인 영구 박제', true),
+              seg(' → 오염 없는 '),
+              seg('고품질 Raw Data', true),
+              seg('.'),
+            ],
+          ],
+        },
+        {
+          headline: 'AI · 범국가적 전력망 관리',
+          points: [
+            [
+              seg('스마트시티 '),
+              seg('발전량 밸런싱', true),
+              seg(' · '),
+              seg('피크 타임 수요 예측', true),
+              seg(' · 이상 징후 AI 감지.'),
+            ],
+            [
+              seg('계량기 = '),
+              seg('데이터 자산 생산 기지', true),
+              seg('로 탈바꿈.'),
+            ],
+          ],
+        },
+      ],
+    },
   },
   {
     id: 4,
@@ -97,9 +336,67 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     slideImage:
       'https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&w=1200&q=85',
     detailTitle: '국가 디지털 화폐(CBDC) 연계 차세대 핀테크망',
-    detailParagraphs: [
-      '현재 전 세계 금융 시장의 가장 뜨거운 화두는 단연 \'스테이블코인과 디지털 화폐(CBDC)\'입니다. 페이팔(PayPal)이 자체 스테이블코인을 발행하고 비자(Visa)가 결제망에 이를 연동하는 등, 글로벌 결제 인프라는 이미 블록체인 위로 올라탔습니다. 국내에서도 네이버, 카카오 등 빅테크 기업들이 블록체인 인프라와 결제 사업을 융합하기 위해 사활을 걸고 있으며, 특히 한국은행은 예금 토큰 기반의 디지털 화폐(CBDC) 도입을 위한 \'프로젝트 한강\' 파일럿 테스트를 본격적으로 추진하며 국가 주도의 디지털 금융 혁신에 시동을 걸었습니다.',
-      'MVP 그리드랩의 P2P 에너지 거래망은 바로 이 거대한 금융 패러다임 전환을 정확히 정조준하고 있습니다. 현재 저희가 구현한 \'WON 토큰\' 기반의 스마트 컨트랙트 정산 시스템은, 향후 한국은행이 발행할 \'원화 기반 예금 토큰(CBDC)\'과 즉각적으로 1:1 연동(Plugging)이 가능하도록 설계된 차세대 인프라입니다. 에너지 산업과 최철단 핀테크가 결합하는 그 교두보에 저희 시스템이 글로벌 표준으로서 자리매김할 것입니다.',
-    ],
+    detail: {
+      punchline: 'WON 토큰 정산망 → 원화 CBDC·스테이블코인 확장의 에너지 핀테크 교두보.',
+      crisisTitle: '현행 에너지 결제의 한계',
+      crisisItems: [
+        {
+          headline: '레거시 은행·카드 정산의 비효율',
+          points: [
+            [
+              seg('P2P 에너지 정산에 '),
+              seg('복잡한 은행 중개', true),
+              seg(' · 높은 '),
+              seg('수수료·지연', true),
+              seg(' · 디지털 화폐 미대응.'),
+            ],
+          ],
+        },
+        {
+          headline: '금융 패러다임 전환과의 단절',
+          points: [
+            [
+              seg('PayPal·Visa '),
+              seg('스테이블코인', true),
+              seg(' 결제망 vs 국내 에너지 정산 '),
+              seg('구형 인프라', true),
+              seg(' 괴리.'),
+            ],
+          ],
+        },
+      ],
+      innovationTitle: 'MVP 그리드랩 × CBDC (TO-BE)',
+      innovationItems: [
+        {
+          headline: '한국은행 프로젝트 한강 · 원화 스테이블코인',
+          points: [
+            [
+              seg('BOK '),
+              seg('예금 토큰(CBDC)', true),
+              seg(' 파일럿 — '),
+              seg('이창용 총재', true),
+              seg(' 원화 스테이블코인 정책과 동행.'),
+            ],
+          ],
+        },
+        {
+          headline: 'WON 토큰 → CBDC 1:1 Plugging',
+          points: [
+            [
+              seg('현재 '),
+              seg('WON 스마트 컨트랙트 정산', true),
+              seg(' → 향후 '),
+              seg('원화 예금 토큰 즉시 연동', true),
+              seg(' 설계 완료.'),
+            ],
+            [
+              seg('에너지 × '),
+              seg('차세대 핀테크', true),
+              seg(' 글로벌 표준 인프라.'),
+            ],
+          ],
+        },
+      ],
+    },
   },
 ]

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, X, ChevronRight, ChevronLeft, type LucideIcon } from 'lucide-react'
 import { SHOWCASE_TABS } from './showcaseContent'
+import { ShowcaseDetailPanel } from './ShowcaseDetailPanel'
 
 function TabButton({
   tab,
@@ -100,7 +101,7 @@ function DetailModal({
             <div className="bg-blue-600 p-2 rounded-lg text-white shrink-0">
               <Icon size={22} />
             </div>
-            <h3 className="text-base md:text-2xl font-bold text-white truncate">{tab.detailTitle}</h3>
+            <h3 className="text-base md:text-xl font-bold text-white truncate">{tab.detailTitle}</h3>
           </div>
           <button
             type="button"
@@ -113,7 +114,7 @@ function DetailModal({
         </div>
 
         <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
-          <div className="relative lg:w-1/2 h-48 sm:h-56 lg:h-auto shrink-0 lg:shrink bg-black">
+          <div className="relative lg:w-[45%] h-44 sm:h-52 lg:h-auto shrink-0 lg:shrink bg-black">
             <AnimatePresence mode="wait">
               <motion.img
                 key={tab.slideImage}
@@ -132,19 +133,19 @@ function DetailModal({
             </div>
           </div>
 
-          <div className="lg:w-1/2 flex flex-col min-h-0">
-            <div className="flex-1 overflow-y-auto p-5 md:p-8 lg:p-10">
-              <span className="inline-block px-3 py-1 bg-blue-900/50 text-blue-400 font-bold rounded-full text-xs mb-4 border border-blue-500/30">
-                Business Value & Impact
-              </span>
-              <h4 className="text-xl md:text-2xl font-extrabold text-white mb-5 leading-snug">
-                {tab.title}
-              </h4>
-              <div className="space-y-5 text-slate-300 text-sm md:text-base leading-relaxed md:leading-loose">
-                {tab.detailParagraphs.map((paragraph, i) => (
-                  <p key={i}>{paragraph}</p>
-                ))}
-              </div>
+          <div className="lg:w-[55%] flex flex-col min-h-0">
+            <div className="flex-1 overflow-y-auto p-5 md:p-8">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <ShowcaseDetailPanel detail={tab.detail} />
+                </motion.div>
+              </AnimatePresence>
             </div>
 
             <div className="shrink-0 flex items-center justify-between gap-2 p-4 md:px-8 border-t border-slate-800 bg-[#060B14]/80">
@@ -188,16 +189,14 @@ export default function CoreValuesBento() {
   const tab = SHOWCASE_TABS[activeTab]
 
   return (
-    <div className="-mx-4 md:-mx-6 -mb-4 md:-mb-6 flex flex-col md:flex-row min-h-[520px] md:min-h-[calc(100vh-14rem)] bg-[#060B14] text-slate-100 overflow-hidden rounded-b-2xl font-sans">
-      {/* 좌측 탭 */}
+    <div className="-mx-4 md:-mx-6 -mb-4 md:-mb-6 flex flex-col md:flex-row min-h-[520px] md:min-h-[calc(100vh-11rem)] bg-[#060B14] text-slate-100 overflow-hidden rounded-b-2xl font-sans">
       <div className="md:w-[30%] shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-slate-800 bg-[#0B1121] z-10">
         <div className="px-4 md:px-8 pt-5 md:pt-8 pb-3 shrink-0">
           <div className="text-blue-500 font-bold tracking-widest text-[10px] md:text-sm mb-1">MVP GRID LAB</div>
           <h1 className="text-lg md:text-2xl font-extrabold text-white leading-tight">
-            블록체인 기반
-            <br className="hidden md:block" />
-            {' '}에너지 패러다임 전환
+            핵심 가치 5선
           </h1>
+          <p className="text-slate-500 text-xs mt-1 hidden md:block">클릭 → 3초 스캔용 상세 슬라이드</p>
         </div>
         <div className="flex md:flex-col gap-2 p-3 md:p-6 md:pt-2 overflow-x-auto md:overflow-visible">
           {SHOWCASE_TABS.map((t) => (
@@ -211,7 +210,6 @@ export default function CoreValuesBento() {
         </div>
       </div>
 
-      {/* 우측 히어로 이미지 */}
       <div
         role="button"
         tabIndex={0}
@@ -234,7 +232,7 @@ export default function CoreValuesBento() {
         <div className="absolute inset-0 bg-blue-900/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px] z-20">
           <div className="bg-white text-blue-900 px-5 py-3 md:px-8 md:py-4 rounded-full flex items-center gap-2 md:gap-3 font-extrabold text-sm md:text-lg shadow-2xl translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
             <Search size={20} className="md:w-6 md:h-6" />
-            상세 설명 및 증명 프레젠테이션 보기
+            상세 설명 슬라이드 보기
           </div>
         </div>
 
