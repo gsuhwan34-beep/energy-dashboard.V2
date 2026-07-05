@@ -1,6 +1,22 @@
 import { FileText } from 'lucide-react'
-import type { ShowcaseTab } from './showcaseContent'
+import type { ShowcaseTab, SummarySegment } from './showcaseContent'
 import { ACCENT_STYLES } from './showcaseContent'
+
+function BulletText({ segments, accentText }: { segments: SummarySegment[]; accentText: string }) {
+  return (
+    <p className="text-[15px] text-slate-600 leading-relaxed">
+      {segments.map((s, i) =>
+        s.bold ? (
+          <span key={i} className={`font-bold ${accentText}`}>
+            {s.text}
+          </span>
+        ) : (
+          <span key={i}>{s.text}</span>
+        ),
+      )}
+    </p>
+  )
+}
 
 interface SummaryProps {
   tab: ShowcaseTab
@@ -13,7 +29,7 @@ export function ShowcaseSummaryPanel({ tab, onOpenReport }: SummaryProps) {
   return (
     <div className="flex flex-col h-full min-h-0 gap-3">
       {tab.modalPhoto && (
-        <div className="shrink-0 h-[100px] flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-2">
+        <div className="shrink-0 h-[88px] flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-2">
           <img
             src={tab.modalPhoto}
             alt={tab.imageCaption}
@@ -22,20 +38,19 @@ export function ShowcaseSummaryPanel({ tab, onOpenReport }: SummaryProps) {
         </div>
       )}
 
-      <ul className="flex-1 min-h-0 flex flex-col justify-center gap-3">
+      <ul className="flex-1 min-h-0 flex flex-col justify-center gap-4">
         {tab.summaryBullets.map((bullet, i) => {
           const Icon = bullet.icon
           return (
-            <li key={i} className="flex items-start gap-3">
+            <li key={i} className="flex items-start gap-3.5">
               <div
-                className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center ${accent.badge}`}
+                className={`shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${accent.badge}`}
               >
-                <Icon size={22} strokeWidth={2} />
+                <Icon size={24} strokeWidth={2} />
               </div>
-              <p className="text-sm text-slate-700 leading-snug pt-2 font-medium">
-                <span className="text-slate-400 mr-1.5">•</span>
-                {bullet.text}
-              </p>
+              <div className="pt-1.5 min-w-0">
+                <BulletText segments={bullet.segments} accentText={accent.text} />
+              </div>
             </li>
           )
         })}

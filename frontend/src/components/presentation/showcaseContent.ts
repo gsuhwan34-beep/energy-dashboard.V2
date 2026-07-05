@@ -7,7 +7,7 @@ import {
   Coins,
   ServerCrash,
   Network,
-  Shield,
+  Activity,
   Building2,
   Wallet,
   Zap,
@@ -20,13 +20,19 @@ import {
   Globe,
   Landmark,
   Link2,
+  Activity,
 } from 'lucide-react'
 
 export type TabAccent = 'blue' | 'amber' | 'emerald' | 'violet' | 'indigo'
 
+export interface SummarySegment {
+  text: string
+  bold?: boolean
+}
+
 export interface SummaryBullet {
   icon: LucideIcon
-  text: string
+  segments: SummarySegment[]
 }
 
 export interface ReportSection {
@@ -96,6 +102,8 @@ export const ACCENT_STYLES: Record<
   },
 }
 
+const seg = (text: string, bold = false): SummarySegment => ({ text, bold })
+
 export const SHOWCASE_TABS: ShowcaseTab[] = [
   {
     id: 0,
@@ -109,15 +117,47 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     summaryBullets: [
       {
         icon: ServerCrash,
-        text: '카카오 판교 DC 화재처럼 중앙 관제 서버 다운 시 전국 전력 계량·요금 정산이 동시 마비',
+        segments: [
+          seg('카카오 '),
+          seg('판교 데이터센터 화재', true),
+          seg('처럼 '),
+          seg('중앙 관제 서버', true),
+          seg('가 멈추면 '),
+          seg('전국 전력 계량·요금 정산', true),
+          seg('이 한꺼번에 마비됩니다.'),
+        ],
       },
       {
         icon: Network,
-        text: 'Arbitrum L2 퍼블릭 블록체인 — 전 세계 수만 노드 분산 저장, 99% 파괴되어도 무중단 운영',
+        segments: [
+          seg('퍼블릭 블록체인', true),
+          seg('으로 전 세계 '),
+          seg('수만 개 노드', true),
+          seg('에 분산 저장 — '),
+          seg('99%가 해킹·파괴', true),
+          seg('되어도 '),
+          seg('무중단', true),
+          seg(' 운영이 가능합니다.'),
+        ],
       },
       {
-        icon: Shield,
-        text: 'RAM + 독립 보조 전원으로 물리적 훼손 감지 시 온체인 강제 전송 · Zero-Trust 방어망',
+        icon: Activity,
+        segments: [
+          seg('실시간 전력 측정', true),
+          seg('으로 '),
+          seg('이상 추이·훼손', true),
+          seg('을 감지하면 '),
+          seg('라즈베리파이', true),
+          seg('에서 '),
+          seg('메신저 즉시 알림', true),
+          seg(', '),
+          seg('스마트 컨트랙트', true),
+          seg('로 '),
+          seg('위변조 불가', true),
+          seg('한 '),
+          seg('무신뢰(Zero-Trust)', true),
+          seg(' 인프라를 구축합니다.'),
+        ],
       },
     ],
     reportTitle: '단일 장애점(SPOF) 해소 및 스마트 컨트랙트 자동화',
@@ -147,15 +187,42 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     summaryBullets: [
       {
         icon: Building2,
-        text: '마이크로그리드 시대지만 이웃에게 전력을 팔려면 한전·플랫폼 중개를 반드시 거쳐야 함',
+        segments: [
+          seg('지붕 '),
+          seg('태양광', true),
+          seg(' 시대인데도 이웃에게 전기를 팔려면 '),
+          seg('한전·플랫폼 중개', true),
+          seg('를 꼭 거쳐야 하고, '),
+          seg('수수료·정산 지연', true),
+          seg('이 발생합니다.'),
+        ],
       },
       {
         icon: Wallet,
-        text: 'MetaMask 연동 — 스마트 컨트랙트가 중개인 없이 생산자·소비자를 1:1 자동 매칭',
+        segments: [
+          seg('MetaMask', true),
+          seg('만 연결하면 '),
+          seg('스마트 컨트랙트', true),
+          seg('가 '),
+          seg('중개인 없이', true),
+          seg(' 생산자와 소비자를 '),
+          seg('1:1 자동 매칭', true),
+          seg('합니다.'),
+        ],
       },
       {
         icon: Zap,
-        text: '측정 kWh만큼 WON 토큰 즉시 결제 · 수수료 Zero · 수익 100% 프로슈머 귀속',
+        segments: [
+          seg('사용한 '),
+          seg('kWh만큼 WON 토큰', true),
+          seg('으로 '),
+          seg('즉시 결제', true),
+          seg(' · '),
+          seg('수수료 0원', true),
+          seg(' · 수익 '),
+          seg('100% 프로슈머', true),
+          seg('에게 돌아갑니다.'),
+        ],
       },
     ],
     reportTitle: '중개인 없는 P2P 분산 에너지 직거래',
@@ -185,15 +252,39 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     summaryBullets: [
       {
         icon: FileWarning,
-        text: 'RE100은 애플·구글 등 빅테크 하청의 필수 생존 요건 — 수주~수개월 REC 실사·브로커 비용',
+        segments: [
+          seg('애플·구글 ', true),
+          seg('RE100', true),
+          seg('은 하청업체 '),
+          seg('필수 조건', true),
+          seg(' — '),
+          seg('수개월 REC 실사', true),
+          seg('와 '),
+          seg('브로커 비용', true),
+          seg('이 듭니다.'),
+        ],
       },
       {
         icon: BadgeCheck,
-        text: '스마트 컨트랙트가 감사관 역할 — 계측 즉시 위변조 불가능한 블록체인 영구 기록',
+        segments: [
+          seg('계측 즉시 ', true),
+          seg('블록체인 영구 기록', true),
+          seg(' — '),
+          seg('스마트 컨트랙트', true),
+          seg('가 '),
+          seg('감사관', true),
+          seg(' 역할을 대신합니다.'),
+        ],
       },
       {
         icon: Timer,
-        text: '온체인 데이터 = 녹색 전력 생산 증명서 · 서류 심사·감사 비용 Zero',
+        segments: [
+          seg('온체인 데이터', true),
+          seg(' = '),
+          seg('녹색 전력 증명서', true),
+          seg(' · 서류 심사·감사 비용 '),
+          seg('Zero', true),
+        ],
       },
     ],
     reportTitle: 'RE100 인증 프리패스 (시간/비용 ZERO)',
@@ -223,15 +314,41 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     summaryBullets: [
       {
         icon: Layers,
-        text: '기존 전력 데이터는 기관별 Silo · 장주기 측정 · 조작 가능 — AI 학습에 부적합',
+        segments: [
+          seg('기존 전력 데이터는 '),
+          seg('기관별 파편화', true),
+          seg(' · '),
+          seg('느린 측정 주기', true),
+          seg(' · '),
+          seg('조작 가능', true),
+          seg(' — '),
+          seg('AI 학습에 부적합', true),
+          seg('합니다.'),
+        ],
       },
       {
         icon: Brain,
-        text: '초단위 계측 + 100% 무결성 검증 오라클 데이터를 블록체인에 영구 박제',
+        segments: [
+          seg('초 단위 계측', true),
+          seg(' + '),
+          seg('무결성 검증', true),
+          seg(' 후 블록체인에 '),
+          seg('영구 저장', true),
+          seg('되는 '),
+          seg('오라클 데이터', true),
+          seg('를 생산합니다.'),
+        ],
       },
       {
         icon: LineChart,
-        text: '피크 수요 예측·발전 밸런싱 AI 학습 → 범국가적 전력망 관리 데이터 자산',
+        segments: [
+          seg('피크 수요 예측', true),
+          seg(' · '),
+          seg('발전 밸런싱', true),
+          seg(' AI 학습용 '),
+          seg('고품질 데이터 자산', true),
+          seg('으로 활용됩니다.'),
+        ],
       },
     ],
     reportTitle: '고품질 전력 데이터의 자산화 (Data Capitalization)',
@@ -263,15 +380,37 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     summaryBullets: [
       {
         icon: Globe,
-        text: 'PayPal·Visa 스테이블코인 결제망 상용화 — 국내 에너지 정산은 레거시 인프라에 머물러 있음',
+        segments: [
+          seg('PayPal·Visa', true),
+          seg(' 등 '),
+          seg('스테이블코인 결제', true),
+          seg('는 이미 상용화 — 국내 에너지 정산은 '),
+          seg('구형 인프라', true),
+          seg('에 머물러 있습니다.'),
+        ],
       },
       {
         icon: Landmark,
-        text: '한국은행 프로젝트 한강 · 이창용 총재 「원화 스테이블코인 도입」 국가 정책과 정합',
+        segments: [
+          seg('한국은행 ', true),
+          seg('프로젝트 한강', true),
+          seg(' · 이창용 총재 '),
+          seg('「원화 스테이블코인」', true),
+          seg(' 정책과 '),
+          seg('정합', true),
+          seg('합니다.'),
+        ],
       },
       {
         icon: Link2,
-        text: 'WON 토큰 스마트 컨트랙트 정산 → 원화 예금 토큰(CBDC) 즉시 연동 가능 설계',
+        segments: [
+          seg('WON 토큰 정산', true),
+          seg(' → 향후 '),
+          seg('원화 CBDC', true),
+          seg('와 '),
+          seg('즉시 연동', true),
+          seg(' 가능한 차세대 설계입니다.'),
+        ],
       },
     ],
     reportTitle: '국가 디지털 화폐(CBDC) 연계 차세대 핀테크망',

@@ -132,7 +132,7 @@ function DetailModal({
         className={`relative w-full bg-white rounded-2xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col ${
           isReport
             ? 'max-w-2xl h-[min(640px,calc(100dvh-2rem))]'
-            : 'max-w-lg h-[min(520px,calc(100dvh-2rem))]'
+            : 'max-w-xl h-[min(560px,calc(100dvh-2rem))]'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
