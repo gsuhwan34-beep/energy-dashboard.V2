@@ -8,7 +8,7 @@ import {
   type ShowcaseTab,
 } from './showcaseContent'
 import { ShowcaseDetailPanel } from './ShowcaseDetailPanel'
-import { ShowcaseContrastVisual } from './ShowcaseContrastVisual'
+import { ShowcaseHeroSlot } from './ShowcaseHeroSlot'
 
 function TabButton({
   tab,
@@ -77,6 +77,123 @@ function AutoProgressBar({
   )
 }
 
+function ModalHeader({
+  tab,
+  activeTab,
+  onClose,
+}: {
+  tab: ShowcaseTab
+  activeTab: number
+  onClose: () => void
+}) {
+  const Icon = tab.icon as LucideIcon
+  const accent = ACCENT_STYLES[tab.accent]
+  return (
+    <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100 bg-white">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className={`${accent.bg} p-1.5 rounded-lg text-white shrink-0`}>
+          <Icon size={16} />
+        </div>
+        <div className="min-w-0">
+          <p className={`text-[9px] font-bold uppercase ${accent.text}`}>
+            {activeTab + 1}/{SHOWCASE_TABS.length} · {tab.tagline}
+          </p>
+          <h3 className="text-sm font-bold text-slate-900 truncate">{tab.detailTitle}</h3>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        className="text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100"
+        aria-label="닫기"
+      >
+        <X size={18} />
+      </button>
+    </div>
+  )
+}
+
+function ModalFooter({
+  activeTab,
+  accentText,
+  onClose,
+  onChangeTab,
+}: {
+  activeTab: number
+  accentText: string
+  onClose: () => void
+  onChangeTab: (idx: number) => void
+}) {
+  return (
+    <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-slate-50">
+      <button
+        type="button"
+        disabled={activeTab === 0}
+        onClick={() => onChangeTab(activeTab - 1)}
+        className="flex items-center gap-1 text-xs font-semibold text-slate-500 disabled:opacity-30"
+      >
+        <ChevronLeft size={16} /> 이전
+      </button>
+      {activeTab < SHOWCASE_TABS.length - 1 ? (
+        <button
+          type="button"
+          onClick={() => onChangeTab(activeTab + 1)}
+          className={`flex items-center gap-1 text-xs font-semibold ${accentText}`}
+        >
+          다음 <ChevronRight size={16} />
+        </button>
+      ) : (
+        <button type="button" onClick={onClose} className="text-xs font-semibold text-emerald-600">
+          닫기 ✓
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** 1~4번: 이미지 없이 구조화 텍스트만 */
+function TextDetailBody({ tab }: { tab: ShowcaseTab }) {
+  return (
+    <div className="flex-1 min-h-0 p-4 overflow-hidden">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab.id}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="h-full"
+        >
+          <ShowcaseDetailPanel detail={tab.detail} />
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  )
+}
+
+/** 5번: 발언 사진 전체 + 아래 설명 */
+function BokDetailBody({ tab }: { tab: ShowcaseTab }) {
+  return (
+    <div className="flex-1 min-h-0 flex flex-col p-3 gap-2 overflow-hidden">
+      <div className="flex-[1.15] min-h-0 flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-2">
+        {tab.modalPhoto && (
+          <img
+            src={tab.modalPhoto}
+            alt={tab.imageCaption}
+            className="max-w-full max-h-full w-auto h-auto object-contain"
+          />
+        )}
+      </div>
+      <p className="shrink-0 text-[10px] text-center text-slate-500 font-medium px-2">
+        {tab.imageCaption}
+      </p>
+      <div className="flex-[0.85] min-h-0 overflow-hidden">
+        <ShowcaseDetailPanel detail={tab.detail} />
+      </div>
+    </div>
+  )
+}
+
 function DetailModal({
   activeTab,
   onClose,
@@ -88,8 +205,8 @@ function DetailModal({
 }) {
   const tab = SHOWCASE_TABS[activeTab]
   if (!tab) return null
-  const Icon = tab.icon as LucideIcon
   const accent = ACCENT_STYLES[tab.accent]
+  const isBok = tab.id === 4
 
   return (
     <motion.div
@@ -105,86 +222,21 @@ function DetailModal({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.98 }}
         transition={{ duration: 0.2 }}
-        className="relative w-full max-w-4xl h-[min(520px,calc(100dvh-2rem))] bg-white rounded-2xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col"
+        className={`relative w-full bg-white rounded-2xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col ${
+          isBok
+            ? 'max-w-3xl h-[min(700px,calc(100dvh-1.5rem))]'
+            : 'max-w-4xl h-[min(500px,calc(100dvh-2rem))]'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100 bg-white">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className={`${accent.bg} p-1.5 rounded-lg text-white shrink-0`}>
-              <Icon size={16} />
-            </div>
-            <div className="min-w-0">
-              <p className={`text-[9px] font-bold uppercase ${accent.text}`}>
-                {activeTab + 1}/{SHOWCASE_TABS.length} · {tab.tagline}
-              </p>
-              <h3 className="text-sm font-bold text-slate-900 truncate">{tab.detailTitle}</h3>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100"
-            aria-label="닫기"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex-1 min-h-0 flex flex-col p-4 gap-3 overflow-hidden">
-          {tab.modalPhoto ? (
-            <div className="shrink-0 flex gap-3 items-stretch h-[88px]">
-              <div className="w-[140px] shrink-0 rounded-lg overflow-hidden border border-indigo-200 bg-slate-100">
-                <img src={tab.modalPhoto} alt="" className="w-full h-full object-cover object-top" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <ShowcaseContrastVisual tab={tab} variant="strip" />
-              </div>
-            </div>
-          ) : (
-            <div className="shrink-0 h-[100px]">
-              <ShowcaseContrastVisual tab={tab} variant="strip" />
-            </div>
-          )}
-
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="h-full"
-              >
-                <ShowcaseDetailPanel detail={tab.detail} />
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
-
-        <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-slate-50">
-          <button
-            type="button"
-            disabled={activeTab === 0}
-            onClick={() => onChangeTab(activeTab - 1)}
-            className="flex items-center gap-1 text-xs font-semibold text-slate-500 disabled:opacity-30"
-          >
-            <ChevronLeft size={16} /> 이전
-          </button>
-          {activeTab < SHOWCASE_TABS.length - 1 ? (
-            <button
-              type="button"
-              onClick={() => onChangeTab(activeTab + 1)}
-              className={`flex items-center gap-1 text-xs font-semibold ${accent.text}`}
-            >
-              다음 <ChevronRight size={16} />
-            </button>
-          ) : (
-            <button type="button" onClick={onClose} className="text-xs font-semibold text-emerald-600">
-              닫기 ✓
-            </button>
-          )}
-        </div>
+        <ModalHeader tab={tab} activeTab={activeTab} onClose={onClose} />
+        {isBok ? <BokDetailBody tab={tab} /> : <TextDetailBody tab={tab} />}
+        <ModalFooter
+          activeTab={activeTab}
+          accentText={accent.text}
+          onClose={onClose}
+          onChangeTab={onChangeTab}
+        />
       </motion.div>
     </motion.div>
   )
@@ -291,7 +343,7 @@ export default function CoreValuesBento() {
                 transition={{ duration: 0.25 }}
                 className="h-full"
               >
-                <ShowcaseContrastVisual tab={tab} variant="hero" />
+                <ShowcaseHeroSlot tab={tab} />
               </motion.div>
             </AnimatePresence>
           </div>

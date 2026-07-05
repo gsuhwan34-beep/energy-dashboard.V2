@@ -35,7 +35,9 @@ export interface ShowcaseTab {
   tagline: string
   shortDesc: string
   imageCaption: string
-  /** 모달에서 뉴스 사진 표시 (CBDC) */
+  /** 메인 화면 이미지 (5번 CBDC 슬라이드 등) */
+  heroImage?: string
+  /** 상세 모달 전용 이미지 (5번 뉴스 발언 사진) */
   modalPhoto?: string
   detailTitle: string
   detail: ShowcaseDetailContent
@@ -238,6 +240,7 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     tagline: 'WON → CBDC',
     shortDesc: '한국은행 원화 스테이블코인 정책과 연계 — P2P 에너지 정산으로 디지털 금융 확장에 기여.',
     imageCaption: '이창용 총재 · 원화 스테이블코인 (2025.8.19 국회)',
+    heroImage: '/presentation/bok-governor-slide.png',
     modalPhoto: '/presentation/bok-governor-news.png',
     detailTitle: '스테이블코인 기반 정산 · CBDC 확장',
     detail: {
