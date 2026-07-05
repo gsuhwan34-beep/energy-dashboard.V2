@@ -1,8 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, X, ChevronRight, ChevronLeft, Sparkles, type LucideIcon } from 'lucide-react'
-import { SHOWCASE_TABS, ACCENT_STYLES, type ShowcaseTab } from './showcaseContent'
+import { X, ChevronRight, ChevronLeft, Sparkles, Pause, Play, type LucideIcon } from 'lucide-react'
+import {
+  SHOWCASE_TABS,
+  ACCENT_STYLES,
+  AUTO_SLIDE_MS,
+  type ShowcaseTab,
+} from './showcaseContent'
 import { ShowcaseDetailPanel } from './ShowcaseDetailPanel'
+import { ShowcaseContrastVisual } from './ShowcaseContrastVisual'
 
 function TabButton({
   tab,
@@ -22,24 +28,24 @@ function TabButton({
     <button
       type="button"
       onClick={onSelect}
-      className={`group flex items-start gap-3 p-3 md:p-3.5 rounded-xl transition-all duration-200 text-left shrink-0 md:shrink w-full border ${
+      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left shrink-0 lg:shrink w-full border ${
         isActive
           ? `${accent.bg} border-transparent text-white shadow-md`
-          : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'
+          : 'bg-white border-slate-200 hover:border-slate-300'
       }`}
     >
       <div
-        className={`flex items-center justify-center w-8 h-8 rounded-lg shrink-0 text-xs font-black ${
-          isActive ? 'bg-white/25 text-white' : `${accent.badge}`
+        className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 text-[10px] font-black ${
+          isActive ? 'bg-white/25 text-white' : accent.badge
         }`}
       >
-        {isActive ? <Icon size={16} /> : String(index + 1).padStart(2, '0')}
+        {isActive ? <Icon size={14} /> : String(index + 1).padStart(2, '0')}
       </div>
-      <div className="min-w-0 pt-0.5">
-        <p className={`font-bold text-sm leading-tight ${isActive ? 'text-white' : 'text-slate-800'}`}>
+      <div className="min-w-0">
+        <p className={`font-bold text-xs leading-tight ${isActive ? 'text-white' : 'text-slate-800'}`}>
           {tab.title}
         </p>
-        <p className={`text-[10px] mt-0.5 truncate ${isActive ? 'text-white/75' : 'text-slate-400'}`}>
+        <p className={`text-[9px] mt-0.5 truncate ${isActive ? 'text-white/75' : 'text-slate-400'}`}>
           {tab.tagline}
         </p>
       </div>
@@ -47,81 +53,26 @@ function TabButton({
   )
 }
 
-function HeroImagePanel({ tab }: { tab: ShowcaseTab }) {
-  const accent = ACCENT_STYLES[tab.accent]
-  const isContained = tab.heroStyle === 'contained'
-
-  if (isContained) {
-    return (
-      <div className={`absolute inset-0 bg-gradient-to-br ${accent.gradient} flex items-center justify-center p-6 md:p-10`}>
-        <motion.div
-          initial={{ opacity: 0, y: 12, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.45 }}
-          className="relative w-full max-w-lg"
-        >
-          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-400/20 to-violet-400/20 rounded-2xl blur-lg" />
-          <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-white/80 bg-white">
-            <img
-              src={tab.mainImage}
-              alt={tab.imageCaption}
-              className="w-full h-auto object-cover"
-            />
-          </div>
-          <p className="mt-3 text-center text-[11px] md:text-xs text-slate-500 font-medium px-2">
-            {tab.imageCaption}
-          </p>
-        </motion.div>
-      </div>
-    )
-  }
-
+function AutoProgressBar({
+  activeTab,
+  paused,
+  resetKey,
+}: {
+  activeTab: number
+  paused: boolean
+  resetKey: number
+}) {
+  const accent = ACCENT_STYLES[SHOWCASE_TABS[activeTab].accent]
   return (
-    <>
-      <motion.img
-        key={tab.mainImage}
-        src={tab.mainImage}
-        alt={tab.title}
-        initial={{ opacity: 0, scale: 1.05 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.5 }}
-        className="absolute inset-0 w-full h-full object-cover"
+    <div className="absolute top-0 left-0 right-0 h-1 bg-slate-200 z-30">
+      <motion.div
+        key={`${activeTab}-${resetKey}`}
+        className={`h-full ${accent.bg}`}
+        initial={{ width: '0%' }}
+        animate={{ width: paused ? undefined : '100%' }}
+        transition={{ duration: paused ? 0 : AUTO_SLIDE_MS / 1000, ease: 'linear' }}
+        style={paused ? { width: '100%' } : undefined}
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-white/20 via-transparent to-white" />
-      <div className="absolute top-4 right-4">
-        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${accent.badge} shadow-sm`}>
-          <Sparkles size={10} />
-          {tab.tagline}
-        </span>
-      </div>
-    </>
-  )
-}
-
-function SlideImagePanel({ tab }: { tab: ShowcaseTab }) {
-  const isNews = tab.id === 4
-
-  return (
-    <div className="relative h-full min-h-[200px] lg:min-h-0 bg-slate-100 flex flex-col">
-      <div className="flex-1 relative overflow-hidden">
-        <img
-          src={tab.slideImage}
-          alt={tab.imageCaption}
-          className={`w-full h-full ${isNews ? 'object-cover object-top' : 'object-cover'}`}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-black/50 via-transparent to-transparent lg:from-transparent lg:to-white/90 pointer-events-none" />
-      </div>
-      <div className="shrink-0 px-4 py-3 bg-white border-t border-slate-200">
-        <p className="text-[11px] md:text-xs text-slate-600 leading-relaxed font-medium">
-          {tab.imageCaption}
-        </p>
-        {isNews && (
-          <p className="text-[10px] text-indigo-600 font-semibold mt-1">
-            국회 기획재정위원회 업무보고 · 원화 스테이블코인
-          </p>
-        )}
-      </div>
     </div>
   )
 }
@@ -145,107 +96,94 @@ function DetailModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-2 md:p-6"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 md:p-4"
     >
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} aria-hidden />
 
       <motion.div
-        initial={{ opacity: 0, y: 24, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 16, scale: 0.97 }}
-        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-5xl max-h-[94vh] bg-white rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col"
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.98 }}
+        transition={{ duration: 0.2 }}
+        className="relative w-full max-w-4xl h-[min(520px,calc(100dvh-2rem))] bg-white rounded-2xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Progress */}
-        <div className="h-1 bg-slate-100 shrink-0">
-          <div
-            className={`h-full ${accent.bg} transition-all duration-300`}
-            style={{ width: `${((activeTab + 1) / SHOWCASE_TABS.length) * 100}%` }}
-          />
-        </div>
-
-        <div className="flex justify-between items-center gap-3 px-4 md:px-6 py-4 border-b border-slate-100 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className={`${accent.bg} p-2 rounded-xl text-white shrink-0 shadow-sm`}>
-              <Icon size={20} />
+        <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100 bg-white">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`${accent.bg} p-1.5 rounded-lg text-white shrink-0`}>
+              <Icon size={16} />
             </div>
             <div className="min-w-0">
-              <p className={`text-[10px] font-bold uppercase tracking-wider ${accent.text}`}>
-                {activeTab + 1} / {SHOWCASE_TABS.length} · {tab.tagline}
+              <p className={`text-[9px] font-bold uppercase ${accent.text}`}>
+                {activeTab + 1}/{SHOWCASE_TABS.length} · {tab.tagline}
               </p>
-              <h3 className="text-sm md:text-lg font-bold text-slate-900 truncate">{tab.detailTitle}</h3>
+              <h3 className="text-sm font-bold text-slate-900 truncate">{tab.detailTitle}</h3>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-2 rounded-full shrink-0 transition-colors"
+            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100"
             aria-label="닫기"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
-        <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
-          <div className="lg:w-[42%] shrink-0 lg:shrink border-b lg:border-b-0 lg:border-r border-slate-100">
+        <div className="flex-1 min-h-0 flex flex-col p-4 gap-3 overflow-hidden">
+          {tab.modalPhoto ? (
+            <div className="shrink-0 flex gap-3 items-stretch h-[88px]">
+              <div className="w-[140px] shrink-0 rounded-lg overflow-hidden border border-indigo-200 bg-slate-100">
+                <img src={tab.modalPhoto} alt="" className="w-full h-full object-cover object-top" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <ShowcaseContrastVisual tab={tab} variant="strip" />
+              </div>
+            </div>
+          ) : (
+            <div className="shrink-0 h-[100px]">
+              <ShowcaseContrastVisual tab={tab} variant="strip" />
+            </div>
+          )}
+
+          <div className="flex-1 min-h-0 overflow-hidden">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="h-48 sm:h-56 lg:h-full"
+                transition={{ duration: 0.15 }}
+                className="h-full"
               >
-                <SlideImagePanel tab={tab} />
+                <ShowcaseDetailPanel detail={tab.detail} />
               </motion.div>
             </AnimatePresence>
           </div>
+        </div>
 
-          <div className="lg:w-[58%] flex flex-col min-h-0 bg-slate-50/80">
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-7">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeTab}
-                  initial={{ opacity: 0, x: 8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -8 }}
-                  transition={{ duration: 0.22 }}
-                >
-                  <ShowcaseDetailPanel detail={tab.detail} />
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            <div className="shrink-0 flex items-center justify-between gap-2 px-4 md:px-6 py-3.5 border-t border-slate-200 bg-white">
-              <button
-                type="button"
-                disabled={activeTab === 0}
-                onClick={() => onChangeTab(activeTab - 1)}
-                className="flex items-center gap-1 text-sm font-semibold text-slate-500 hover:text-slate-900 disabled:opacity-25 disabled:pointer-events-none transition-colors"
-              >
-                <ChevronLeft size={18} /> 이전
-              </button>
-              {activeTab < SHOWCASE_TABS.length - 1 ? (
-                <button
-                  type="button"
-                  onClick={() => onChangeTab(activeTab + 1)}
-                  className={`flex items-center gap-1.5 text-sm font-semibold ${accent.text} hover:opacity-80 transition-opacity`}
-                >
-                  다음 · {SHOWCASE_TABS[activeTab + 1].title}
-                  <ChevronRight size={18} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="text-sm font-semibold text-emerald-600 hover:text-emerald-800 transition-colors"
-                >
-                  발표 계속하기 ✓
-                </button>
-              )}
-            </div>
-          </div>
+        <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-slate-50">
+          <button
+            type="button"
+            disabled={activeTab === 0}
+            onClick={() => onChangeTab(activeTab - 1)}
+            className="flex items-center gap-1 text-xs font-semibold text-slate-500 disabled:opacity-30"
+          >
+            <ChevronLeft size={16} /> 이전
+          </button>
+          {activeTab < SHOWCASE_TABS.length - 1 ? (
+            <button
+              type="button"
+              onClick={() => onChangeTab(activeTab + 1)}
+              className={`flex items-center gap-1 text-xs font-semibold ${accent.text}`}
+            >
+              다음 <ChevronRight size={16} />
+            </button>
+          ) : (
+            <button type="button" onClick={onClose} className="text-xs font-semibold text-emerald-600">
+              닫기 ✓
+            </button>
+          )}
         </div>
       </motion.div>
     </motion.div>
@@ -255,103 +193,133 @@ function DetailModal({
 export default function CoreValuesBento() {
   const [activeTab, setActiveTab] = useState(0)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [autoPlay, setAutoPlay] = useState(true)
+  const [progressKey, setProgressKey] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const tab = SHOWCASE_TABS[activeTab]
   const accent = ACCENT_STYLES[tab.accent]
 
+  const bumpProgress = useCallback(() => setProgressKey((k) => k + 1), [])
+
+  const goNext = useCallback(() => {
+    setActiveTab((prev) => (prev + 1) % SHOWCASE_TABS.length)
+    bumpProgress()
+  }, [bumpProgress])
+
+  const selectTab = useCallback(
+    (id: number) => {
+      setActiveTab(id)
+      bumpProgress()
+    },
+    [bumpProgress],
+  )
+
+  useEffect(() => {
+    if (!autoPlay || isModalOpen) return
+    timerRef.current = setInterval(goNext, AUTO_SLIDE_MS)
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [autoPlay, isModalOpen, goNext, activeTab, progressKey])
+
   return (
-    <div className="flex flex-col lg:flex-row min-h-[580px] md:min-h-[calc(100vh-10rem)] bg-slate-50 text-slate-900 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="lg:w-[280px] xl:w-[300px] shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-200 bg-white">
-        <div className="px-5 md:px-6 pt-6 pb-4 shrink-0 border-b border-slate-100">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-              <Sparkles size={16} className="text-white" />
+    <div className="flex flex-col lg:flex-row h-[min(680px,calc(100dvh-9rem))] bg-slate-50 text-slate-900 overflow-hidden">
+      <aside className="lg:w-[240px] shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-200 bg-white">
+        <div className="px-4 pt-4 pb-3 shrink-0 border-b border-slate-100">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+                <Sparkles size={14} className="text-white" />
+              </div>
+              <div>
+                <p className="text-[9px] font-bold text-blue-600 uppercase">MVP Grid Lab</p>
+                <p className="text-[10px] text-slate-400">KMU · 2026</p>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">MVP Grid Lab</p>
-              <p className="text-xs text-slate-400">KMU Capstone · 2026</p>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAutoPlay((p) => !p)
+                bumpProgress()
+              }}
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+              aria-label={autoPlay ? '자동 재생 일시정지' : '자동 재생'}
+            >
+              {autoPlay ? <Pause size={14} /> : <Play size={14} />}
+            </button>
           </div>
-          <h1 className="text-xl font-black text-slate-900 leading-tight">핵심 가치 5선</h1>
-          <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-            탭 선택 후 화면 클릭 → 상세 슬라이드
-          </p>
+          <h1 className="text-lg font-black text-slate-900">핵심 가치 5선</h1>
+          <p className="text-[10px] text-slate-500 mt-1">6초마다 자동 전환 · 탭 클릭 시 상세</p>
         </div>
 
-        <nav className="flex lg:flex-col gap-2 p-3 md:p-4 overflow-x-auto lg:overflow-visible">
+        <nav className="flex lg:flex-col gap-1.5 p-2.5 overflow-x-auto lg:overflow-y-auto lg:flex-1">
           {SHOWCASE_TABS.map((t, i) => (
             <TabButton
               key={t.id}
               tab={t}
               index={i}
               isActive={activeTab === t.id}
-              onSelect={() => setActiveTab(t.id)}
+              onSelect={() => selectTab(t.id)}
             />
           ))}
         </nav>
       </aside>
 
-      {/* Hero */}
-      <main
-        role="button"
-        tabIndex={0}
-        className="flex-1 relative flex flex-col min-h-[400px] lg:min-h-0 cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-inset"
-        onClick={() => setIsModalOpen(true)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setIsModalOpen(true)
-          }
-        }}
-      >
-        <div className="absolute inset-0 overflow-hidden bg-white">
+      <main className="flex-1 relative flex flex-col min-h-[320px] min-w-0">
+        <AutoProgressBar activeTab={activeTab} paused={!autoPlay || isModalOpen} resetKey={progressKey} />
+
+        <div
+          role="button"
+          tabIndex={0}
+          className="flex-1 flex flex-col min-h-0 cursor-pointer outline-none"
+          onClick={() => setIsModalOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              setIsModalOpen(true)
+            }
+          }}
+        >
+          <div className="flex-1 min-h-0 p-4 pb-2">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -12 }}
+                transition={{ duration: 0.25 }}
+                className="h-full"
+              >
+                <ShowcaseContrastVisual tab={tab} variant="hero" />
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
           <AnimatePresence mode="wait">
-            <motion.div key={activeTab} className="absolute inset-0">
-              <HeroImagePanel tab={tab} />
+            <motion.div
+              key={`info-${activeTab}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="shrink-0 px-4 pb-4"
+            >
+              <div className="rounded-xl bg-white border border-slate-200 shadow-sm px-4 py-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${accent.badge}`}>
+                    0{activeTab + 1}
+                  </span>
+                  <span className="text-[9px] font-semibold text-slate-400 uppercase">{tab.tagline}</span>
+                </div>
+                <h2 className="text-base md:text-lg font-black text-slate-900 leading-tight">{tab.title}</h2>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">{tab.shortDesc}</p>
+                <p className={`text-[10px] font-semibold mt-1.5 ${accent.text}`}>
+                  탭하여 상세 보기 →
+                </p>
+              </div>
             </motion.div>
           </AnimatePresence>
         </div>
-
-        {/* Hover CTA */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 pointer-events-none">
-          <div className={`${accent.bg} text-white px-6 py-3 rounded-full flex items-center gap-2 font-bold text-sm md:text-base shadow-xl`}>
-            <Search size={18} />
-            상세 슬라이드 열기
-          </div>
-        </div>
-
-        {/* Bottom card */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={`card-${activeTab}`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            transition={{ duration: 0.3 }}
-            className="relative z-10 mt-auto m-4 md:m-6"
-          >
-            <div className="rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200/80 shadow-xl p-5 md:p-7 max-w-xl">
-              <div className="flex items-center gap-2 mb-2">
-                <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${accent.badge}`}>
-                  0{activeTab + 1}
-                </span>
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                  {tab.tagline}
-                </span>
-              </div>
-              <h2 className="text-xl md:text-2xl xl:text-3xl font-black text-slate-900 leading-tight mb-2">
-                {tab.title}
-              </h2>
-              <p className="text-sm md:text-base text-slate-600 leading-relaxed">
-                {tab.shortDesc}
-              </p>
-              <p className={`mt-3 text-xs font-semibold ${accent.text} flex items-center gap-1`}>
-                클릭하여 상세 보기
-                <ChevronRight size={14} />
-              </p>
-            </div>
-          </motion.div>
-        </AnimatePresence>
       </main>
 
       <AnimatePresence>
@@ -359,7 +327,7 @@ export default function CoreValuesBento() {
           <DetailModal
             activeTab={activeTab}
             onClose={() => setIsModalOpen(false)}
-            onChangeTab={setActiveTab}
+            onChangeTab={selectTab}
           />
         )}
       </AnimatePresence>
