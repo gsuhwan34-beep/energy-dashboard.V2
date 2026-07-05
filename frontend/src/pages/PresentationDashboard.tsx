@@ -2,12 +2,14 @@ import { useState } from 'react'
 import type { useWallet } from '../hooks/useWallet'
 import LiveVerificationFlow from '../components/presentation/LiveVerificationFlow'
 import WhyThisSystem from '../components/presentation/WhyThisSystem'
+import CoreValuesBento from '../components/presentation/CoreValuesBento'
 
 type WalletHook = ReturnType<typeof useWallet>
-type SubTab = 'flow' | 'why'
+type SubTab = 'flow' | 'values' | 'why'
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'flow', label: 'Live Verification Flow' },
+  { id: 'values', label: '핵심 가치 5선' },
   { id: 'why', label: '왜 필요한가' },
 ]
 
@@ -45,6 +47,7 @@ export default function PresentationDashboard(_props: Props) {
 
         <div className="p-4 md:p-6">
           {subTab === 'flow' && <LiveVerificationFlow />}
+          {subTab === 'values' && <CoreValuesBento />}
           {subTab === 'why' && <WhyThisSystem />}
         </div>
       </div>
