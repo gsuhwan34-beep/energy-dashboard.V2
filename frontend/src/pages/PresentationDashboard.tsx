@@ -45,7 +45,7 @@ export default function PresentationDashboard(_props: Props) {
           </div>
         </div>
 
-        <div className="p-4 md:p-6">
+        <div className={subTab === 'values' ? 'p-0' : 'p-4 md:p-6'}>
           {subTab === 'flow' && <LiveVerificationFlow />}
           {subTab === 'values' && <CoreValuesBento />}
           {subTab === 'why' && <WhyThisSystem />}
