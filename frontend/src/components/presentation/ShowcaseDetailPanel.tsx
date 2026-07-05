@@ -1,14 +1,18 @@
 import type { DetailItem, ShowcaseDetailContent, TextSegment } from './showcaseContent'
 
-function HighlightLine({ segments }: { segments: TextSegment[] }) {
+function HighlightLine({
+  segments,
+  variant,
+}: {
+  segments: TextSegment[]
+  variant: 'crisis' | 'innovation'
+}) {
+  const accent = variant === 'crisis' ? 'text-red-600' : 'text-emerald-600'
   return (
-    <p className="text-slate-300 text-sm md:text-[15px] leading-relaxed pl-3 border-l-2 border-slate-700">
+    <p className="text-slate-600 text-sm leading-relaxed">
       {segments.map((s, i) =>
         s.highlight ? (
-          <span
-            key={i}
-            className="font-extrabold text-white bg-slate-800/90 px-1 rounded mx-0.5"
-          >
+          <span key={i} className={`${accent} font-bold`}>
             {s.text}
           </span>
         ) : (
@@ -31,27 +35,25 @@ function DetailBlock({
   const isCrisis = variant === 'crisis'
   return (
     <div
-      className={`p-4 md:p-5 rounded-xl mb-4 last:mb-0 ${
-        isCrisis
-          ? 'bg-red-950/20 border border-red-900/40'
-          : 'bg-emerald-950/20 border border-emerald-900/40'
+      className={`bg-white p-5 md:p-6 rounded-2xl shadow-sm ${
+        isCrisis ? 'border border-red-100' : 'border border-emerald-100'
       }`}
     >
-      <h5
-        className={`font-bold text-base md:text-lg mb-4 flex items-center gap-2 ${
-          isCrisis ? 'text-red-400' : 'text-emerald-400'
+      <div
+        className={`flex items-center gap-2 font-black text-base md:text-lg mb-4 border-b pb-2 ${
+          isCrisis ? 'text-red-600 border-red-100' : 'text-emerald-600 border-emerald-100'
         }`}
       >
         <span aria-hidden>{isCrisis ? '⚠️' : '✨'}</span>
-        {title}
-      </h5>
+        <span>{title}</span>
+      </div>
       <div className="space-y-4">
         {items.map((item, i) => (
           <div key={i}>
-            <p className="text-white font-semibold text-sm md:text-base mb-2">{item.headline}</p>
+            <h5 className="text-slate-900 font-extrabold text-sm md:text-base mb-1">{item.headline}</h5>
             <div className="space-y-2">
               {item.points.map((line, j) => (
-                <HighlightLine key={j} segments={line} />
+                <HighlightLine key={j} segments={line} variant={variant} />
               ))}
             </div>
           </div>
@@ -63,12 +65,12 @@ function DetailBlock({
 
 export function ShowcaseDetailPanel({ detail }: { detail: ShowcaseDetailContent }) {
   return (
-    <div className="space-y-4">
-      <div className="bg-blue-900/30 border border-blue-500/30 p-4 rounded-xl">
-        <p className="text-[10px] md:text-xs font-bold text-blue-300/80 uppercase tracking-wider mb-2">
-          💡 핵심 가치
+    <div className="flex flex-col gap-5 md:gap-6">
+      <div className="bg-blue-50 border border-blue-200 p-5 md:p-6 rounded-2xl shadow-sm">
+        <p className="text-blue-600 text-[10px] md:text-xs font-bold tracking-wider uppercase mb-1">
+          💡 핵심 가치 (Core Value)
         </p>
-        <p className="text-blue-400 font-extrabold text-base md:text-xl leading-snug">
+        <p className="text-slate-900 font-black text-base md:text-xl leading-relaxed">
           &ldquo;{detail.punchline}&rdquo;
         </p>
       </div>

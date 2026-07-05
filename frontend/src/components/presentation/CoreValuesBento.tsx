@@ -18,20 +18,20 @@ function TabButton({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex items-center gap-3 p-3 md:p-4 rounded-xl transition-all duration-300 text-left shrink-0 md:shrink md:w-full ${
+      className={`flex items-center gap-3 p-3 md:p-4 rounded-xl transition-all duration-300 text-left shrink-0 md:shrink md:w-full border ${
         isActive
-          ? 'bg-blue-600 shadow-lg shadow-blue-900/40 md:scale-[1.02]'
-          : 'bg-transparent text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'
+          ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/20 md:scale-[1.02]'
+          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
       }`}
     >
       <div
         className={`p-2 rounded-lg shrink-0 ${
-          isActive ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-500'
+          isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
         }`}
       >
         <Icon size={20} className="md:w-6 md:h-6" />
       </div>
-      <span className={`font-bold text-sm md:text-base ${isActive ? 'text-white' : ''}`}>
+      <span className={`font-bold text-sm md:text-base ${isActive ? 'text-white' : 'text-slate-800'}`}>
         {tab.title}
       </span>
     </button>
@@ -57,7 +57,7 @@ function MainHeroImage({ tab }: { tab: (typeof SHOWCASE_TABS)[number] }) {
       src={src}
       alt={tab.title}
       onError={handleError}
-      initial={{ opacity: 0, scale: 1.06 }}
+      initial={{ opacity: 0, scale: 1.04 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
@@ -86,27 +86,27 @@ function DetailModal({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[100] flex items-center justify-center p-3 md:p-8"
     >
-      <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} aria-hidden />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 20 }}
         transition={{ duration: 0.3 }}
-        className="relative w-full max-w-6xl max-h-[92vh] bg-[#0B1121] rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col"
+        className="relative w-full max-w-6xl max-h-[92vh] bg-white rounded-2xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center gap-3 p-4 md:p-6 border-b border-slate-800 bg-[#060B14] shrink-0">
+        <div className="flex justify-between items-center gap-3 p-4 md:p-6 border-b border-slate-200 bg-white shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="bg-blue-600 p-2 rounded-lg text-white shrink-0">
               <Icon size={22} />
             </div>
-            <h3 className="text-base md:text-xl font-bold text-white truncate">{tab.detailTitle}</h3>
+            <h3 className="text-base md:text-xl font-bold text-slate-900 truncate">{tab.detailTitle}</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-full shrink-0"
+            className="text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 p-2 rounded-full shrink-0 transition-colors"
             aria-label="닫기"
           >
             <X size={22} />
@@ -114,7 +114,7 @@ function DetailModal({
         </div>
 
         <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
-          <div className="relative lg:w-[45%] h-44 sm:h-52 lg:h-auto shrink-0 lg:shrink bg-black">
+          <div className="relative lg:w-[45%] h-44 sm:h-52 lg:h-auto shrink-0 lg:shrink bg-slate-100">
             <AnimatePresence mode="wait">
               <motion.img
                 key={tab.slideImage}
@@ -127,14 +127,14 @@ function DetailModal({
                 className="w-full h-full object-cover"
               />
             </AnimatePresence>
-            <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-transparent to-[#0B1121]/90 pointer-events-none" />
-            <div className="absolute bottom-3 left-3 px-2.5 py-1 rounded-full bg-black/50 text-[10px] text-white/80 border border-white/10">
+            <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-transparent to-white/80 pointer-events-none" />
+            <div className="absolute bottom-3 left-3 px-2.5 py-1 rounded-full bg-white/90 text-[10px] text-slate-600 border border-slate-200 shadow-sm font-medium">
               {activeTab + 1} / {SHOWCASE_TABS.length}
             </div>
           </div>
 
-          <div className="lg:w-[55%] flex flex-col min-h-0">
-            <div className="flex-1 overflow-y-auto p-5 md:p-8">
+          <div className="lg:w-[55%] flex flex-col min-h-0 bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-5 md:p-8 lg:p-10">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeTab}
@@ -148,12 +148,12 @@ function DetailModal({
               </AnimatePresence>
             </div>
 
-            <div className="shrink-0 flex items-center justify-between gap-2 p-4 md:px-8 border-t border-slate-800 bg-[#060B14]/80">
+            <div className="shrink-0 flex items-center justify-between gap-2 p-4 md:px-8 border-t border-slate-200 bg-white">
               <button
                 type="button"
                 disabled={activeTab === 0}
                 onClick={() => onChangeTab(activeTab - 1)}
-                className="flex items-center gap-1 text-sm font-bold text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none"
+                className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-slate-900 disabled:opacity-30 disabled:pointer-events-none"
               >
                 <ChevronLeft size={18} /> 이전
               </button>
@@ -161,7 +161,7 @@ function DetailModal({
                 <button
                   type="button"
                   onClick={() => onChangeTab(activeTab + 1)}
-                  className="flex items-center gap-1 text-sm font-bold text-blue-400 hover:text-white"
+                  className="flex items-center gap-1 text-sm font-bold text-blue-600 hover:text-blue-800"
                 >
                   다음 ({SHOWCASE_TABS[activeTab + 1].title})
                   <ChevronRight size={18} />
@@ -170,7 +170,7 @@ function DetailModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="text-sm font-bold text-emerald-400 hover:text-white"
+                  className="text-sm font-bold text-emerald-600 hover:text-emerald-800"
                 >
                   발표 계속하기
                 </button>
@@ -189,13 +189,11 @@ export default function CoreValuesBento() {
   const tab = SHOWCASE_TABS[activeTab]
 
   return (
-    <div className="-mx-4 md:-mx-6 -mb-4 md:-mb-6 flex flex-col md:flex-row min-h-[520px] md:min-h-[calc(100vh-11rem)] bg-[#060B14] text-slate-100 overflow-hidden rounded-b-2xl font-sans">
-      <div className="md:w-[30%] shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-slate-800 bg-[#0B1121] z-10">
+    <div className="-mx-4 md:-mx-6 -mb-4 md:-mb-6 flex flex-col md:flex-row min-h-[520px] md:min-h-[calc(100vh-11rem)] bg-slate-50 text-slate-900 overflow-hidden rounded-b-2xl font-sans">
+      <div className="md:w-[30%] shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-slate-200 bg-white z-10">
         <div className="px-4 md:px-8 pt-5 md:pt-8 pb-3 shrink-0">
-          <div className="text-blue-500 font-bold tracking-widest text-[10px] md:text-sm mb-1">MVP GRID LAB</div>
-          <h1 className="text-lg md:text-2xl font-extrabold text-white leading-tight">
-            핵심 가치 5선
-          </h1>
+          <div className="text-blue-600 font-bold tracking-widest text-[10px] md:text-sm mb-1">MVP GRID LAB</div>
+          <h1 className="text-lg md:text-2xl font-extrabold text-slate-900 leading-tight">핵심 가치 5선</h1>
           <p className="text-slate-500 text-xs mt-1 hidden md:block">클릭 → 3초 스캔용 상세 슬라이드</p>
         </div>
         <div className="flex md:flex-col gap-2 p-3 md:p-6 md:pt-2 overflow-x-auto md:overflow-visible">
@@ -213,7 +211,7 @@ export default function CoreValuesBento() {
       <div
         role="button"
         tabIndex={0}
-        className="flex-1 relative flex flex-col min-h-[360px] md:min-h-0 cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+        className="flex-1 relative flex flex-col min-h-[360px] md:min-h-0 cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 bg-white"
         onClick={() => setIsModalOpen(true)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -226,11 +224,11 @@ export default function CoreValuesBento() {
           <AnimatePresence mode="wait">
             <MainHeroImage key={activeTab} tab={tab} />
           </AnimatePresence>
-          <div className="absolute inset-0 bg-gradient-to-t from-[#060B14] via-[#060B14]/55 to-[#060B14]/20" />
+          <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/95" />
         </div>
 
-        <div className="absolute inset-0 bg-blue-900/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px] z-20">
-          <div className="bg-white text-blue-900 px-5 py-3 md:px-8 md:py-4 rounded-full flex items-center gap-2 md:gap-3 font-extrabold text-sm md:text-lg shadow-2xl translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+        <div className="absolute inset-0 bg-white/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[1px] z-20">
+          <div className="bg-blue-600 text-white px-5 py-3 md:px-8 md:py-4 rounded-full flex items-center gap-2 md:gap-3 font-extrabold text-sm md:text-lg shadow-xl translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
             <Search size={20} className="md:w-6 md:h-6" />
             상세 설명 슬라이드 보기
           </div>
@@ -243,15 +241,15 @@ export default function CoreValuesBento() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.35 }}
-            className="relative mt-auto p-6 md:p-10 z-10"
+            className="relative mt-auto z-10 m-4 md:m-6 p-5 md:p-8 rounded-2xl bg-white/95 backdrop-blur-sm border border-slate-200 shadow-lg"
           >
-            <p className="text-blue-400 font-mono text-xs md:text-sm mb-2 opacity-80">
+            <p className="text-blue-600 font-mono text-xs md:text-sm mb-2 font-semibold">
               0{activeTab + 1} · 핵심 가치
             </p>
-            <h2 className="text-2xl md:text-4xl lg:text-5xl font-extrabold text-white tracking-tight mb-3 md:mb-4 drop-shadow-lg">
+            <h2 className="text-xl md:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight mb-2 md:mb-3">
               {tab.title}
             </h2>
-            <p className="text-sm md:text-lg lg:text-xl text-slate-200 max-w-2xl leading-relaxed drop-shadow-md border-l-4 border-blue-500 pl-3 md:pl-4">
+            <p className="text-sm md:text-base lg:text-lg text-slate-600 max-w-2xl leading-relaxed border-l-4 border-blue-500 pl-3 md:pl-4">
               {tab.shortDesc}
             </p>
           </motion.div>
