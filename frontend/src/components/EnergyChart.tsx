@@ -8,8 +8,12 @@ import {
   type CandleInterval,
   buildVolumeBars,
   getVolumeSubtitle,
+  getDefaultWindowLabel,
+  defaultZoomForBars,
   CANDLE_INTERVAL_TABS,
-  type VolumeBar,
+  type ZoomRange,
+  BAR_MIN_WIDTH,
+  BAR_MAX_WIDTH,
 } from '../lib/candleAggregation'
 import { toDeltaReadings } from '../lib/readingDelta'
 
@@ -25,35 +29,13 @@ interface Props {
   cumulativeBadge?: CumulativeBadge
 }
 
-interface ZoomRange {
-  start: number
-  end: number
-}
-
 const tooltipBg = '#fff'
 const tooltipBorder = 'rgba(42,42,42,0.08)'
 const fgBase = '#212121'
 const fgSubtle = '#7a7a7a'
 const barColor = '#fd4b96'
-const TWO_HOURS_MS = 2 * 60 * 60 * 1000
 const ZOOM_FACTOR = 1.35
 const MIN_ZOOM_SPAN = 2
-
-function defaultZoomForInterval(barList: VolumeBar[], iv: CandleInterval): ZoomRange {
-  if (!barList.length) return { start: 0, end: 100 }
-
-  if (iv === 'tick') {
-    const first = barList[0].time
-    const last = barList[barList.length - 1].time
-    const span = last - first
-    if (span <= TWO_HOURS_MS) return { start: 0, end: 100 }
-    const windowStart = last - TWO_HOURS_MS
-    const start = ((windowStart - first) / span) * 100
-    return { start: Math.max(0, start), end: 100 }
-  }
-
-  return { start: 0, end: 100 }
-}
 
 function clampZoom(range: ZoomRange): ZoomRange {
   const span = Math.min(100, Math.max(MIN_ZOOM_SPAN, range.end - range.start))
@@ -126,7 +108,7 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
 
   const applyDefaultZoom = useCallback((iv: CandleInterval, barList: VolumeBar[]) => {
     userControlledZoom.current = false
-    setZoom(defaultZoomForInterval(barList, iv))
+    setZoom(defaultZoomForBars(barList, iv))
   }, [])
 
   useEffect(() => {
@@ -272,7 +254,8 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
           type: 'bar',
           data: barData,
           itemStyle: { color: barColor },
-          barMaxWidth: interval === 'tick' ? 8 : interval === '30d' ? 32 : 24,
+          barMinWidth: BAR_MIN_WIDTH,
+          barMaxWidth: BAR_MAX_WIDTH,
         },
       ],
     }
@@ -320,10 +303,7 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <p className="text-[10px] text-fg-muted">
-          {subtitle}
-          {interval === 'tick' ? ' · 기본 최근 2시간' : ''}
-        </p>
+        <p className="text-[10px] text-fg-muted">{subtitle}</p>
         {hasData && (
           <div className="flex flex-wrap items-center gap-1 shrink-0">
             <ChartToolButton label="확대" title="시간축 확대" onClick={zoomIn}>
@@ -334,7 +314,7 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
             </ChartToolButton>
             <ChartToolButton
               label="기본값"
-              title={interval === 'tick' ? '최근 2시간으로 복원' : '전체 구간으로 복원'}
+              title={`${getDefaultWindowLabel(interval)}으로 복원`}
               onClick={resetZoom}
             >
               <RotateCcw className="w-3.5 h-3.5" />

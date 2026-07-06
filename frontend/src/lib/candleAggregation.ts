@@ -1,7 +1,7 @@
 import type { EnergyReading } from '../hooks/useEnergyData'
 import { sortReadings } from './readingDelta'
 
-export type CandleInterval = 'tick' | '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '7d' | '30d'
+export type CandleInterval = 'tick' | '15m' | '30m' | '1h' | '6h' | '12h' | '1d'
 
 export interface VolumeBar {
   /** 구간 시작 시각 (ms) */
@@ -11,6 +11,35 @@ export interface VolumeBar {
   count: number
 }
 
+export interface ZoomRange {
+  start: number
+  end: number
+}
+
+const H = 60 * 60 * 1000
+const D = 24 * H
+
+/** 주기별 기본 가로축 창 (막대 밀도를 일정하게 유지) */
+export const DEFAULT_WINDOW_MS: Record<CandleInterval, number> = {
+  tick: 2 * H,
+  '15m': 12 * H,
+  '30m': 24 * H,
+  '1h': 48 * H,
+  '6h': 7 * D,
+  '12h': 14 * D,
+  '1d': 28 * D,
+}
+
+const DEFAULT_WINDOW_LABELS: Record<CandleInterval, string> = {
+  tick: '최근 2시간',
+  '15m': '최근 12시간',
+  '30m': '최근 24시간',
+  '1h': '최근 48시간',
+  '6h': '최근 1주',
+  '12h': '최근 2주',
+  '1d': '최근 4주',
+}
+
 const INTERVAL_MS: Record<Exclude<CandleInterval, 'tick'>, number> = {
   '15m': 15 * 60 * 1000,
   '30m': 30 * 60 * 1000,
@@ -18,8 +47,6 @@ const INTERVAL_MS: Record<Exclude<CandleInterval, 'tick'>, number> = {
   '6h': 6 * 60 * 60 * 1000,
   '12h': 12 * 60 * 60 * 1000,
   '1d': 24 * 60 * 60 * 1000,
-  '7d': 7 * 24 * 60 * 60 * 1000,
-  '30d': 30 * 24 * 60 * 60 * 1000,
 }
 
 function floorTime(tsMs: number, intervalMs: number): number {
@@ -71,6 +98,27 @@ export function buildVolumeBars(readings: EnergyReading[], interval: CandleInter
   return aggregateIntervalBars(readings, interval)
 }
 
+/** 주기별 기본 줌 — 데이터 끝(최신) 기준 최근 N시간/일 */
+export function defaultZoomForBars(barList: VolumeBar[], iv: CandleInterval): ZoomRange {
+  if (!barList.length) return { start: 0, end: 100 }
+
+  const first = barList[0].time
+  const last = barList[barList.length - 1].time
+  const span = last - first
+  if (span <= 0) return { start: 0, end: 100 }
+
+  const windowMs = DEFAULT_WINDOW_MS[iv]
+  if (span <= windowMs) return { start: 0, end: 100 }
+
+  const windowStart = last - windowMs
+  const start = ((windowStart - first) / span) * 100
+  return { start: Math.max(0, start), end: 100 }
+}
+
+export function getDefaultWindowLabel(iv: CandleInterval): string {
+  return DEFAULT_WINDOW_LABELS[iv]
+}
+
 const INTERVAL_LABELS: Record<CandleInterval, string> = {
   tick: '전송별',
   '15m': '15분',
@@ -79,12 +127,10 @@ const INTERVAL_LABELS: Record<CandleInterval, string> = {
   '6h': '6시간',
   '12h': '12시간',
   '1d': '1일',
-  '7d': '7일',
-  '30d': '1달',
 }
 
 export function getVolumeSubtitle(interval: CandleInterval, count: number): string {
-  return `${INTERVAL_LABELS[interval]} · ${count}개 구간`
+  return `${INTERVAL_LABELS[interval]} · ${count}개 구간 · ${getDefaultWindowLabel(interval)}`
 }
 
 export const CANDLE_INTERVAL_TABS: { key: CandleInterval; label: string }[] = [
@@ -95,6 +141,8 @@ export const CANDLE_INTERVAL_TABS: { key: CandleInterval; label: string }[] = [
   { key: '6h', label: '6시간' },
   { key: '12h', label: '12시간' },
   { key: '1d', label: '1일' },
-  { key: '7d', label: '7일' },
-  { key: '30d', label: '1달' },
 ]
+
+/** 막대 두께 — 주기와 무관하게 잘 보이도록 */
+export const BAR_MIN_WIDTH = 10
+export const BAR_MAX_WIDTH = 40
