@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { EnergyReading } from '../hooks/useEnergyData'
-import { ExternalLink, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react'
 import OnChainExplainer from './OnChainExplainer'
 import InfoTooltip, { BLOCKCHAIN_TIPS } from './InfoTooltip'
 
@@ -73,9 +73,6 @@ export default function TransactionTable({
               <th className="text-right py-2 pr-3 font-medium">
                 <InfoTooltip label="블록" tip={BLOCKCHAIN_TIPS.block} />
               </th>
-              <th className="text-center py-2 font-medium">
-                <InfoTooltip label="상태" tip={BLOCKCHAIN_TIPS.status} />
-              </th>
             </tr>
           </thead>
           <tbody>
@@ -108,21 +105,6 @@ export default function TransactionTable({
                 )}
                 <td className="py-2.5 pr-3 text-right font-mono text-fg-subtle">
                   {tx.blockNumber.toLocaleString()}
-                </td>
-                <td className="py-2.5 text-center">
-                  {tx.status === 'confirmed' ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-tag-cyan-10 text-tag-cyan-100">
-                      <CheckCircle2 className="w-3 h-3" />
-                      확인됨
-                    </span>
-                  ) : tx.status === 'failed' ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-tag-orange-10 text-tag-orange-100">
-                      <XCircle className="w-3 h-3" />
-                      실패
-                    </span>
-                  ) : (
-                    <span className="text-fg-muted text-[10px]">-</span>
-                  )}
                 </td>
               </tr>
             )})}

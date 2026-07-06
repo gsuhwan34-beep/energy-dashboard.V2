@@ -12,7 +12,6 @@ export interface EnergyReading {
   timestamp: number
   date: string
   gasUsed?: number
-  status?: string
   gasCostWei?: number
   gasCostGwei?: number
   blockTimestamp?: number
