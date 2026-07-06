@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import ReactECharts from 'echarts-for-react'
-import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import type { EChartsOption } from 'echarts'
+import { ZoomIn, ZoomOut, RotateCcw, Expand } from 'lucide-react'
 import type { EnergyReading } from '../hooks/useEnergyData'
 import { PeriodTabButton } from './ChartPeriodCalendar'
 import {
@@ -35,8 +36,9 @@ const fgBase = '#212121'
 const fgSubtle = '#7a7a7a'
 const barColor = '#fd4b96'
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000
+const ZOOM_FACTOR = 1.35
+const MIN_ZOOM_SPAN = 2
 
-/** 전송별: 최근 2시간 / 그 외: 전체 */
 function defaultZoomForInterval(barList: VolumeBar[], iv: CandleInterval): ZoomRange {
   if (!barList.length) return { start: 0, end: 100 }
 
@@ -53,9 +55,66 @@ function defaultZoomForInterval(barList: VolumeBar[], iv: CandleInterval): ZoomR
   return { start: 0, end: 100 }
 }
 
+function clampZoom(range: ZoomRange): ZoomRange {
+  const span = Math.min(100, Math.max(MIN_ZOOM_SPAN, range.end - range.start))
+  const center = (range.start + range.end) / 2
+  let start = center - span / 2
+  let end = center + span / 2
+  if (start < 0) {
+    end -= start
+    start = 0
+  }
+  if (end > 100) {
+    start -= end - 100
+    end = 100
+  }
+  return { start: Math.max(0, start), end: Math.min(100, end) }
+}
+
+function zoomInRange(range: ZoomRange): ZoomRange {
+  const span = range.end - range.start
+  const nextSpan = Math.max(MIN_ZOOM_SPAN, span / ZOOM_FACTOR)
+  const center = (range.start + range.end) / 2
+  return clampZoom({ start: center - nextSpan / 2, end: center + nextSpan / 2 })
+}
+
+function zoomOutRange(range: ZoomRange): ZoomRange {
+  const span = range.end - range.start
+  const nextSpan = Math.min(100, span * ZOOM_FACTOR)
+  const center = (range.start + range.end) / 2
+  return clampZoom({ start: center - nextSpan / 2, end: center + nextSpan / 2 })
+}
+
+function ChartToolButton({
+  label,
+  title,
+  onClick,
+  children,
+}: {
+  label: string
+  title: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={label}
+      className="flex items-center gap-1 px-2 py-1 rounded-md border border-border-strong text-[10px] font-medium text-fg-muted hover:text-fg-base hover:bg-bg-subtle transition-colors"
+    >
+      {children}
+      <span>{label}</span>
+    </button>
+  )
+}
+
 export default function EnergyChart({ readings, cumulativeBadge }: Props) {
   const [interval, setCandleInterval] = useState<CandleInterval>('tick')
   const userControlledZoom = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const deltaReadings = useMemo(() => toDeltaReadings(readings), [readings])
   const bars = useMemo(() => buildVolumeBars(deltaReadings, interval), [deltaReadings, interval])
@@ -70,14 +129,12 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
     setZoom(defaultZoomForInterval(barList, iv))
   }, [])
 
-  // 주기 탭 변경 시에만 기본 줌으로 리셋
   useEffect(() => {
     if (!bars.length) return
     applyDefaultZoom(interval, bars)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interval])
 
-  // 데이터 최초 로드 시 기본 줌 (폴링으로 늘어나도 줌 유지)
   useEffect(() => {
     if (!bars.length) {
       prevBarCountRef.current = 0
@@ -89,36 +146,40 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
     prevBarCountRef.current = bars.length
   }, [bars, interval, applyDefaultZoom])
 
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === containerRef.current)
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }, [])
+
   const zoomIn = useCallback(() => {
     userControlledZoom.current = true
-    setZoom((prev) => {
-      const center = (prev.start + prev.end) / 2
-      const span = Math.max(5, (prev.end - prev.start) * 0.65)
-      return {
-        start: Math.max(0, center - span / 2),
-        end: Math.min(100, center + span / 2),
-      }
-    })
+    setZoom((prev) => zoomInRange(prev))
   }, [])
 
   const zoomOut = useCallback(() => {
     userControlledZoom.current = true
-    setZoom((prev) => {
-      const center = (prev.start + prev.end) / 2
-      const span = Math.min(100, (prev.end - prev.start) / 0.65)
-      return {
-        start: Math.max(0, center - span / 2),
-        end: Math.min(100, center + span / 2),
-      }
-    })
+    setZoom((prev) => zoomOutRange(prev))
   }, [])
 
   const resetZoom = useCallback(() => {
     applyDefaultZoom(interval, bars)
   }, [applyDefaultZoom, interval, bars])
 
-  const handleIntervalChange = useCallback((key: CandleInterval) => {
-    setCandleInterval(key)
+  const toggleFullscreen = useCallback(async () => {
+    const el = containerRef.current
+    if (!el) return
+    try {
+      if (document.fullscreenElement === el) {
+        await document.exitFullscreen()
+      } else {
+        await el.requestFullscreen()
+      }
+    } catch {
+      /* ignore unsupported */
+    }
   }, [])
 
   const onChartEvents = useMemo(
@@ -133,7 +194,7 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
     [],
   )
 
-  const option = useMemo(() => {
+  const option = useMemo((): EChartsOption => {
     if (!hasData) return {}
 
     const barData = bars.map((b) => [b.time, b.volume])
@@ -142,8 +203,8 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
       animation: false,
       grid: { left: 56, right: 16, top: 20, bottom: 36 },
       tooltip: {
-        trigger: 'axis' as const,
-        axisPointer: { type: 'shadow' as const },
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
         backgroundColor: tooltipBg,
         borderColor: tooltipBorder,
         borderWidth: 1,
@@ -169,25 +230,25 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
         },
       },
       xAxis: {
-        type: 'time' as const,
+        type: 'time',
         axisLine: { lineStyle: { color: '#7a7a7a' } },
         axisLabel: { color: fgSubtle, fontSize: 9 },
         axisTick: { show: false },
       },
       yAxis: {
-        type: 'value' as const,
+        type: 'value',
         name: 'Wh',
         nameTextStyle: { color: fgSubtle, fontSize: 10 },
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: { color: fgSubtle, fontSize: 10 },
-        splitLine: { lineStyle: { type: 'dashed' as const, color: '#f0f0f0' } },
+        splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } },
       },
       dataZoom: [
         {
-          type: 'inside' as const,
+          type: 'inside',
           xAxisIndex: 0,
-          filterMode: 'filter' as const,
+          filterMode: 'none',
           zoomOnMouseWheel: true,
           moveOnMouseMove: true,
           moveOnMouseWheel: false,
@@ -196,11 +257,11 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
           end: zoom.end,
         },
         {
-          type: 'inside' as const,
+          type: 'inside',
           yAxisIndex: 0,
-          filterMode: 'empty' as const,
-          zoomOnMouseWheel: 'shift' as const,
-          moveOnMouseMove: 'shift' as const,
+          filterMode: 'none',
+          zoomOnMouseWheel: 'shift',
+          moveOnMouseMove: 'shift',
           moveOnMouseWheel: false,
           preventDefaultMouseMove: true,
         },
@@ -217,15 +278,22 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
     }
   }, [bars, hasData, interval, zoom.end, zoom.start])
 
+  const chartHeight = isFullscreen ? 'calc(100dvh - 140px)' : 280
+
   return (
-    <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
+    <div
+      ref={containerRef}
+      className={`border border-border-strong rounded-lg bg-bg-base-opaque p-4 ${
+        isFullscreen ? 'h-dvh overflow-auto' : ''
+      }`}
+    >
       <div className="flex flex-col gap-2 mb-3">
         <div className="flex flex-wrap items-center gap-1">
           {CANDLE_INTERVAL_TABS.map((t) => (
             <PeriodTabButton
               key={t.key}
               active={interval === t.key}
-              onClick={() => handleIntervalChange(t.key)}
+              onClick={() => setCandleInterval(t.key)}
             >
               {t.label}
             </PeriodTabButton>
@@ -251,40 +319,29 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-2 mb-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <p className="text-[10px] text-fg-muted">
           {subtitle}
           {interval === 'tick' ? ' · 기본 최근 2시간' : ''}
         </p>
         {hasData && (
-          <div className="flex items-center gap-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={zoomIn}
-              className="p-1.5 rounded-md border border-border-strong text-fg-muted hover:text-fg-base hover:bg-bg-subtle transition-colors"
-              aria-label="확대"
-              title="확대"
-            >
+          <div className="flex flex-wrap items-center gap-1 shrink-0">
+            <ChartToolButton label="확대" title="시간축 확대" onClick={zoomIn}>
               <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={zoomOut}
-              className="p-1.5 rounded-md border border-border-strong text-fg-muted hover:text-fg-base hover:bg-bg-subtle transition-colors"
-              aria-label="축소"
-              title="축소"
-            >
+            </ChartToolButton>
+            <ChartToolButton label="축소" title="시간축 축소" onClick={zoomOut}>
               <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
+            </ChartToolButton>
+            <ChartToolButton
+              label="기본값"
+              title={interval === 'tick' ? '최근 2시간으로 복원' : '전체 구간으로 복원'}
               onClick={resetZoom}
-              className="p-1.5 rounded-md border border-border-strong text-fg-muted hover:text-fg-base hover:bg-bg-subtle transition-colors"
-              aria-label="기본 보기"
-              title={interval === 'tick' ? '최근 2시간' : '전체 보기'}
             >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
+              <RotateCcw className="w-3.5 h-3.5" />
+            </ChartToolButton>
+            <ChartToolButton label="전체화면" title="차트 전체화면" onClick={toggleFullscreen}>
+              <Expand className="w-3.5 h-3.5" />
+            </ChartToolButton>
           </div>
         )}
       </div>
@@ -292,7 +349,7 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
       {hasData ? (
         <ReactECharts
           option={option}
-          style={{ height: 280 }}
+          style={{ height: chartHeight, minHeight: 280 }}
           opts={{ renderer: 'svg' }}
           notMerge
           onEvents={onChartEvents}
