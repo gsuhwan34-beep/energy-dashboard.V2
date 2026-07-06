@@ -1,7 +1,7 @@
 import type { EnergyReading } from '../hooks/useEnergyData'
 import { sortReadings } from './readingDelta'
 
-export type CandleInterval = 'tick' | '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '7d'
+export type CandleInterval = 'tick' | '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '7d' | '30d'
 
 export interface VolumeBar {
   /** 구간 시작 시각 (ms) */
@@ -19,6 +19,7 @@ const INTERVAL_MS: Record<Exclude<CandleInterval, 'tick'>, number> = {
   '12h': 12 * 60 * 60 * 1000,
   '1d': 24 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
 }
 
 function floorTime(tsMs: number, intervalMs: number): number {
@@ -79,6 +80,7 @@ const INTERVAL_LABELS: Record<CandleInterval, string> = {
   '12h': '12시간',
   '1d': '1일',
   '7d': '7일',
+  '30d': '1달',
 }
 
 export function getVolumeSubtitle(interval: CandleInterval, count: number): string {
@@ -94,4 +96,5 @@ export const CANDLE_INTERVAL_TABS: { key: CandleInterval; label: string }[] = [
   { key: '12h', label: '12시간' },
   { key: '1d', label: '1일' },
   { key: '7d', label: '7일' },
+  { key: '30d', label: '1달' },
 ]

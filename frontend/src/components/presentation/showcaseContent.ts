@@ -120,7 +120,8 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     tagline: 'Zero-SPOF · 무중단',
     shortDesc:
       '중앙 서버 마비 시에도 100% 생존하는 블록체인 분산 노드와 RAM 기반 하드웨어 방어망으로 정산망을 보호합니다.',
-    imageCaption: '중앙집중형 vs 분산형 — Zero-SPOF',
+    imageCaption: '판교 데이터센터 화재 · 카카오톡·다음·페이 장애',
+    heroImage: '/presentation/pangyo-dc-fire.png',
     detailTitle: '물리적 방어벽의 완성 (Zero-SPOF)',
     summaryBullets: [
       {

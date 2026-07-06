@@ -59,11 +59,11 @@ export function ShowcaseSummaryPanel({ tab, onOpenReport }: SummaryProps) {
   return (
     <div className="flex flex-col h-full min-h-0 gap-3">
       {tab.modalPhoto && (
-        <div className="shrink-0 h-[88px] flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-2">
+        <div className="shrink-0 min-h-[min(280px,36vh)] max-h-[min(360px,42vh)] flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-3 mb-1">
           <img
             src={tab.modalPhoto}
             alt={tab.imageCaption}
-            className="max-w-full max-h-full object-contain"
+            className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-sm"
           />
         </div>
       )}

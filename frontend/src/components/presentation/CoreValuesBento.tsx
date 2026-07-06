@@ -104,6 +104,7 @@ function DetailModal({
   const Icon = tab.icon as LucideIcon
   const accent = ACCENT_STYLES[tab.accent]
   const isReport = depth === 'report'
+  const hasModalPhoto = Boolean(tab.modalPhoto)
 
   const handleClose = () => {
     setDepth('summary')
@@ -130,9 +131,11 @@ function DetailModal({
         exit={{ opacity: 0, scale: 0.98 }}
         transition={{ duration: 0.2 }}
         className={`relative w-full bg-white rounded-2xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col ${
-          isReport
-            ? 'max-w-2xl h-[min(640px,calc(100dvh-2rem))]'
-            : 'max-w-xl h-[min(560px,calc(100dvh-2rem))]'
+          hasModalPhoto
+            ? 'max-w-4xl h-[min(780px,calc(100dvh-1.5rem))]'
+            : isReport
+              ? 'max-w-2xl h-[min(640px,calc(100dvh-2rem))]'
+              : 'max-w-xl h-[min(560px,calc(100dvh-2rem))]'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -191,7 +194,7 @@ function DetailModal({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ duration: 0.22 }}
-                className="absolute inset-0 p-4 overflow-hidden"
+                className={`absolute inset-0 overflow-hidden ${hasModalPhoto ? 'p-5' : 'p-4'}`}
               >
                 <ShowcaseSummaryPanel tab={tab} onOpenReport={() => setDepth('report')} />
               </motion.div>

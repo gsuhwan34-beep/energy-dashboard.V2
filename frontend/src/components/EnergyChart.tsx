@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import ReactECharts from 'echarts-for-react'
+import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 import type { EnergyReading } from '../hooks/useEnergyData'
 import { PeriodTabButton } from './ChartPeriodCalendar'
 import {
@@ -26,15 +27,52 @@ const tooltipBg = '#fff'
 const tooltipBorder = 'rgba(42,42,42,0.08)'
 const fgBase = '#212121'
 const fgSubtle = '#7a7a7a'
-const barColor = 'rgba(253,75,150,0.65)'
+const barColor = '#fd4b96'
+
+function initialZoomStart(barCount: number): number {
+  return barCount > 80 ? Math.max(0, 100 - (80 / barCount) * 100) : 0
+}
 
 export default function EnergyChart({ readings, cumulativeBadge }: Props) {
-  const [interval, setInterval] = useState<CandleInterval>('tick')
+  const [interval, setCandleInterval] = useState<CandleInterval>('tick')
 
   const deltaReadings = useMemo(() => toDeltaReadings(readings), [readings])
   const bars = useMemo(() => buildVolumeBars(deltaReadings, interval), [deltaReadings, interval])
   const subtitle = useMemo(() => getVolumeSubtitle(interval, bars.length), [interval, bars.length])
   const hasData = bars.length > 0
+
+  const defaultZoom = useMemo(() => ({ start: initialZoomStart(bars.length), end: 100 }), [bars.length])
+  const [zoom, setZoom] = useState(defaultZoom)
+
+  useEffect(() => {
+    setZoom(defaultZoom)
+  }, [defaultZoom, interval])
+
+  const zoomIn = useCallback(() => {
+    setZoom((prev) => {
+      const center = (prev.start + prev.end) / 2
+      const span = Math.max(5, (prev.end - prev.start) * 0.65)
+      return {
+        start: Math.max(0, center - span / 2),
+        end: Math.min(100, center + span / 2),
+      }
+    })
+  }, [])
+
+  const zoomOut = useCallback(() => {
+    setZoom((prev) => {
+      const center = (prev.start + prev.end) / 2
+      const span = Math.min(100, (prev.end - prev.start) / 0.65)
+      return {
+        start: Math.max(0, center - span / 2),
+        end: Math.min(100, center + span / 2),
+      }
+    })
+  }, [])
+
+  const resetZoom = useCallback(() => {
+    setZoom(defaultZoom)
+  }, [defaultZoom])
 
   const option = useMemo(() => {
     if (!hasData) return {}
@@ -89,8 +127,23 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
       dataZoom: [
         {
           type: 'inside' as const,
-          start: bars.length > 80 ? Math.max(0, 100 - (80 / bars.length) * 100) : 0,
-          end: 100,
+          xAxisIndex: 0,
+          filterMode: 'filter' as const,
+          zoomOnMouseWheel: true,
+          moveOnMouseMove: true,
+          moveOnMouseWheel: false,
+          preventDefaultMouseMove: true,
+          start: zoom.start,
+          end: zoom.end,
+        },
+        {
+          type: 'inside' as const,
+          yAxisIndex: 0,
+          filterMode: 'empty' as const,
+          zoomOnMouseWheel: 'shift' as const,
+          moveOnMouseMove: 'shift' as const,
+          moveOnMouseWheel: false,
+          preventDefaultMouseMove: true,
         },
       ],
       series: [
@@ -99,11 +152,11 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
           type: 'bar',
           data: barData,
           itemStyle: { color: barColor },
-          barMaxWidth: interval === 'tick' ? 8 : 24,
+          barMaxWidth: interval === 'tick' ? 8 : interval === '30d' ? 32 : 24,
         },
       ],
     }
-  }, [bars, hasData, interval])
+  }, [bars, hasData, interval, zoom.end, zoom.start])
 
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
@@ -113,7 +166,7 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
             <PeriodTabButton
               key={t.key}
               active={interval === t.key}
-              onClick={() => setInterval(t.key)}
+              onClick={() => setCandleInterval(t.key)}
             >
               {t.label}
             </PeriodTabButton>
@@ -139,7 +192,40 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
         )}
       </div>
 
-      <p className="text-[10px] text-fg-muted mb-2">{subtitle}</p>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <p className="text-[10px] text-fg-muted">{subtitle}</p>
+        {hasData && (
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={zoomIn}
+              className="p-1.5 rounded-md border border-border-strong text-fg-muted hover:text-fg-base hover:bg-bg-subtle transition-colors"
+              aria-label="확대"
+              title="확대"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={zoomOut}
+              className="p-1.5 rounded-md border border-border-strong text-fg-muted hover:text-fg-base hover:bg-bg-subtle transition-colors"
+              aria-label="축소"
+              title="축소"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={resetZoom}
+              className="p-1.5 rounded-md border border-border-strong text-fg-muted hover:text-fg-base hover:bg-bg-subtle transition-colors"
+              aria-label="전체 보기"
+              title="전체 보기"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
 
       {hasData ? (
         <ReactECharts option={option} style={{ height: 280 }} opts={{ renderer: 'svg' }} notMerge />
