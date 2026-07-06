@@ -4,22 +4,26 @@ import { sortReadings } from './readingDelta'
 export type CandleInterval = 'tick' | '15m' | '30m' | '1h' | '6h' | '12h' | '1d'
 
 export interface VolumeBar {
-  /** 구간 시작 시각 (ms) */
   time: number
-  /** 구간 합계 Wh (전송량) */
   volume: number
   count: number
 }
 
-export interface ZoomRange {
-  start: number
-  end: number
+export interface TimeView {
+  viewEndMs: number
+  windowMs: number
+}
+
+export interface NavExtent {
+  navStartMs: number
+  navEndMs: number
 }
 
 const H = 60 * 60 * 1000
 const D = 24 * H
 
-/** 주기별 기본 가로축 창 (막대 밀도를 일정하게 유지) */
+export const MAX_NAV_HISTORY_MS = 90 * D
+
 export const DEFAULT_WINDOW_MS: Record<CandleInterval, number> = {
   tick: 2 * H,
   '15m': 12 * H,
@@ -40,7 +44,7 @@ const DEFAULT_WINDOW_LABELS: Record<CandleInterval, string> = {
   '1d': '최근 4주',
 }
 
-const INTERVAL_MS: Record<Exclude<CandleInterval, 'tick'>, number> = {
+export const INTERVAL_BUCKET_MS: Record<Exclude<CandleInterval, 'tick'>, number> = {
   '15m': 15 * 60 * 1000,
   '30m': 30 * 60 * 1000,
   '1h': 60 * 60 * 1000,
@@ -48,6 +52,8 @@ const INTERVAL_MS: Record<Exclude<CandleInterval, 'tick'>, number> = {
   '12h': 12 * 60 * 60 * 1000,
   '1d': 24 * 60 * 60 * 1000,
 }
+
+const MIN_VIEW_MS = 15 * 60 * 1000
 
 function floorTime(tsMs: number, intervalMs: number): number {
   return Math.floor(tsMs / intervalMs) * intervalMs
@@ -62,7 +68,6 @@ function bucketToBar(time: number, items: EnergyReading[]): VolumeBar {
   }
 }
 
-/** 전송(틱)별 — 막대 1:1 대응 */
 export function aggregateTickBars(readings: EnergyReading[]): VolumeBar[] {
   return sortReadings(readings).map((r) => ({
     time: r.timestamp * 1000,
@@ -71,12 +76,11 @@ export function aggregateTickBars(readings: EnergyReading[]): VolumeBar[] {
   }))
 }
 
-/** 주기별 전송량 합산 */
 export function aggregateIntervalBars(
   readings: EnergyReading[],
   interval: Exclude<CandleInterval, 'tick'>,
 ): VolumeBar[] {
-  const intervalMs = INTERVAL_MS[interval]
+  const intervalMs = INTERVAL_BUCKET_MS[interval]
   const sorted = sortReadings(readings)
   const map = new Map<number, EnergyReading[]>()
 
@@ -98,21 +102,58 @@ export function buildVolumeBars(readings: EnergyReading[], interval: CandleInter
   return aggregateIntervalBars(readings, interval)
 }
 
-/** 주기별 기본 줌 — 데이터 끝(최신) 기준 최근 N시간/일 */
-export function defaultZoomForBars(barList: VolumeBar[], iv: CandleInterval): ZoomRange {
-  if (!barList.length) return { start: 0, end: 100 }
+export function getNavExtent(bars: VolumeBar[]): NavExtent {
+  const now = Date.now()
+  const lastBar = bars.length ? bars[bars.length - 1].time : now
+  const navEndMs = Math.max(lastBar, now)
+  const navStartMs = navEndMs - MAX_NAV_HISTORY_MS
+  return { navStartMs, navEndMs }
+}
 
-  const first = barList[0].time
-  const last = barList[barList.length - 1].time
-  const span = last - first
-  if (span <= 0) return { start: 0, end: 100 }
+export function defaultTimeView(interval: CandleInterval, navEndMs: number): TimeView {
+  return {
+    viewEndMs: navEndMs,
+    windowMs: DEFAULT_WINDOW_MS[interval],
+  }
+}
 
-  const windowMs = DEFAULT_WINDOW_MS[iv]
-  if (span <= windowMs) return { start: 0, end: 100 }
+export function clampTimeView(view: TimeView, extent: NavExtent): TimeView {
+  const maxWindow = extent.navEndMs - extent.navStartMs
+  let windowMs = Math.min(maxWindow, Math.max(MIN_VIEW_MS, view.windowMs))
+  let viewEndMs = Math.min(extent.navEndMs, Math.max(extent.navStartMs + windowMs, view.viewEndMs))
+  let viewStartMs = viewEndMs - windowMs
+  if (viewStartMs < extent.navStartMs) {
+    viewStartMs = extent.navStartMs
+    viewEndMs = viewStartMs + windowMs
+  }
+  return { viewEndMs, windowMs: viewEndMs - viewStartMs }
+}
 
-  const windowStart = last - windowMs
-  const start = ((windowStart - first) / span) * 100
-  return { start: Math.max(0, start), end: 100 }
+export function getViewRange(view: TimeView): { startMs: number; endMs: number } {
+  return { startMs: view.viewEndMs - view.windowMs, endMs: view.viewEndMs }
+}
+
+export function barsForView(
+  rawBars: VolumeBar[],
+  interval: CandleInterval,
+  viewStartMs: number,
+  viewEndMs: number,
+): VolumeBar[] {
+  if (interval === 'tick') {
+    return rawBars.filter((b) => b.time >= viewStartMs && b.time <= viewEndMs)
+  }
+
+  const bucketMs = INTERVAL_BUCKET_MS[interval]
+  const map = new Map(rawBars.map((b) => [b.time, b]))
+  const result: VolumeBar[] = []
+  let t = floorTime(viewStartMs, bucketMs)
+  const end = floorTime(viewEndMs, bucketMs)
+
+  while (t <= end) {
+    result.push(map.get(t) ?? { time: t, volume: 0, count: 0 })
+    t += bucketMs
+  }
+  return result
 }
 
 export function getDefaultWindowLabel(iv: CandleInterval): string {
@@ -143,6 +184,29 @@ export const CANDLE_INTERVAL_TABS: { key: CandleInterval; label: string }[] = [
   { key: '1d', label: '1일' },
 ]
 
-/** 막대 두께 — 주기와 무관하게 잘 보이도록 */
 export const BAR_MIN_WIDTH = 10
 export const BAR_MAX_WIDTH = 40
+
+export const ZOOM_FACTOR = 1.35
+
+export function zoomInView(view: TimeView, extent: NavExtent): TimeView {
+  const nextWindow = Math.max(MIN_VIEW_MS, view.windowMs / ZOOM_FACTOR)
+  return clampTimeView({ viewEndMs: view.viewEndMs, windowMs: nextWindow }, extent)
+}
+
+export function zoomOutView(view: TimeView, extent: NavExtent): TimeView {
+  const maxWindow = extent.navEndMs - extent.navStartMs
+  const atMaxWindow = view.windowMs >= maxWindow * 0.995
+
+  if (atMaxWindow) {
+    const panStep = view.windowMs * 0.3
+    const viewStart = view.viewEndMs - view.windowMs
+    if (viewStart - panStep >= extent.navStartMs) {
+      return clampTimeView({ viewEndMs: view.viewEndMs - panStep, windowMs: view.windowMs }, extent)
+    }
+    return clampTimeView({ viewEndMs: extent.navStartMs + view.windowMs, windowMs: view.windowMs }, extent)
+  }
+
+  const nextWindow = Math.min(maxWindow, view.windowMs * ZOOM_FACTOR)
+  return clampTimeView({ viewEndMs: view.viewEndMs, windowMs: nextWindow }, extent)
+}

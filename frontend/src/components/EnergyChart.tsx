@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import ReactECharts from 'echarts-for-react'
 import type { EChartsOption } from 'echarts'
-import { ZoomIn, ZoomOut, RotateCcw, Expand } from 'lucide-react'
+import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Minimize2 } from 'lucide-react'
 import type { EnergyReading } from '../hooks/useEnergyData'
 import { PeriodTabButton } from './ChartPeriodCalendar'
 import {
@@ -9,11 +10,17 @@ import {
   buildVolumeBars,
   getVolumeSubtitle,
   getDefaultWindowLabel,
-  defaultZoomForBars,
+  getNavExtent,
+  defaultTimeView,
+  clampTimeView,
+  getViewRange,
+  barsForView,
   CANDLE_INTERVAL_TABS,
-  type ZoomRange,
+  type TimeView,
   BAR_MIN_WIDTH,
   BAR_MAX_WIDTH,
+  zoomInView,
+  zoomOutView,
 } from '../lib/candleAggregation'
 import { toDeltaReadings } from '../lib/readingDelta'
 
@@ -34,38 +41,6 @@ const tooltipBorder = 'rgba(42,42,42,0.08)'
 const fgBase = '#212121'
 const fgSubtle = '#7a7a7a'
 const barColor = '#fd4b96'
-const ZOOM_FACTOR = 1.35
-const MIN_ZOOM_SPAN = 2
-
-function clampZoom(range: ZoomRange): ZoomRange {
-  const span = Math.min(100, Math.max(MIN_ZOOM_SPAN, range.end - range.start))
-  const center = (range.start + range.end) / 2
-  let start = center - span / 2
-  let end = center + span / 2
-  if (start < 0) {
-    end -= start
-    start = 0
-  }
-  if (end > 100) {
-    start -= end - 100
-    end = 100
-  }
-  return { start: Math.max(0, start), end: Math.min(100, end) }
-}
-
-function zoomInRange(range: ZoomRange): ZoomRange {
-  const span = range.end - range.start
-  const nextSpan = Math.max(MIN_ZOOM_SPAN, span / ZOOM_FACTOR)
-  const center = (range.start + range.end) / 2
-  return clampZoom({ start: center - nextSpan / 2, end: center + nextSpan / 2 })
-}
-
-function zoomOutRange(range: ZoomRange): ZoomRange {
-  const span = range.end - range.start
-  const nextSpan = Math.min(100, span * ZOOM_FACTOR)
-  const center = (range.start + range.end) / 2
-  return clampZoom({ start: center - nextSpan / 2, end: center + nextSpan / 2 })
-}
 
 function ChartToolButton({
   label,
@@ -92,191 +67,61 @@ function ChartToolButton({
   )
 }
 
-export default function EnergyChart({ readings, cumulativeBadge }: Props) {
-  const [interval, setCandleInterval] = useState<CandleInterval>('tick')
-  const userControlledZoom = useRef(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [isFullscreen, setIsFullscreen] = useState(false)
+function formatAxisRange(startMs: number, endMs: number): string {
+  const fmt = (ms: number) =>
+    new Date(ms).toLocaleString('ko-KR', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  return `${fmt(startMs)} ~ ${fmt(endMs)}`
+}
 
-  const deltaReadings = useMemo(() => toDeltaReadings(readings), [readings])
-  const bars = useMemo(() => buildVolumeBars(deltaReadings, interval), [deltaReadings, interval])
-  const subtitle = useMemo(() => getVolumeSubtitle(interval, bars.length), [interval, bars.length])
-  const hasData = bars.length > 0
+interface ChartPanelProps {
+  interval: CandleInterval
+  onIntervalChange: (key: CandleInterval) => void
+  cumulativeBadge?: CumulativeBadge
+  subtitle: string
+  viewRangeLabel: string
+  hasData: boolean
+  option: EChartsOption
+  onChartEvents: Record<string, (e: unknown) => void>
+  chartHeight: number | string
+  onZoomIn: () => void
+  onZoomOut: () => void
+  onReset: () => void
+  onExpand: () => void
+  expandLabel?: string
+  className?: string
+}
 
-  const [zoom, setZoom] = useState<ZoomRange>({ start: 0, end: 100 })
-  const prevBarCountRef = useRef(0)
-
-  const applyDefaultZoom = useCallback((iv: CandleInterval, barList: VolumeBar[]) => {
-    userControlledZoom.current = false
-    setZoom(defaultZoomForBars(barList, iv))
-  }, [])
-
-  useEffect(() => {
-    if (!bars.length) return
-    applyDefaultZoom(interval, bars)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interval])
-
-  useEffect(() => {
-    if (!bars.length) {
-      prevBarCountRef.current = 0
-      return
-    }
-    if (prevBarCountRef.current === 0 && !userControlledZoom.current) {
-      applyDefaultZoom(interval, bars)
-    }
-    prevBarCountRef.current = bars.length
-  }, [bars, interval, applyDefaultZoom])
-
-  useEffect(() => {
-    const onFullscreenChange = () => {
-      setIsFullscreen(document.fullscreenElement === containerRef.current)
-    }
-    document.addEventListener('fullscreenchange', onFullscreenChange)
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
-  }, [])
-
-  const zoomIn = useCallback(() => {
-    userControlledZoom.current = true
-    setZoom((prev) => zoomInRange(prev))
-  }, [])
-
-  const zoomOut = useCallback(() => {
-    userControlledZoom.current = true
-    setZoom((prev) => zoomOutRange(prev))
-  }, [])
-
-  const resetZoom = useCallback(() => {
-    applyDefaultZoom(interval, bars)
-  }, [applyDefaultZoom, interval, bars])
-
-  const toggleFullscreen = useCallback(async () => {
-    const el = containerRef.current
-    if (!el) return
-    try {
-      if (document.fullscreenElement === el) {
-        await document.exitFullscreen()
-      } else {
-        await el.requestFullscreen()
-      }
-    } catch {
-      /* ignore unsupported */
-    }
-  }, [])
-
-  const onChartEvents = useMemo(
-    () => ({
-      datazoom: (e: { batch?: Array<{ start?: number; end?: number }>; start?: number; end?: number }) => {
-        const payload = e.batch?.[0] ?? e
-        if (payload.start == null || payload.end == null) return
-        userControlledZoom.current = true
-        setZoom({ start: payload.start, end: payload.end })
-      },
-    }),
-    [],
-  )
-
-  const option = useMemo((): EChartsOption => {
-    if (!hasData) return {}
-
-    const barData = bars.map((b) => [b.time, b.volume])
-
-    return {
-      animation: false,
-      grid: { left: 56, right: 16, top: 20, bottom: 36 },
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        backgroundColor: tooltipBg,
-        borderColor: tooltipBorder,
-        borderWidth: 1,
-        padding: [8, 12],
-        textStyle: { color: fgBase, fontSize: 12 },
-        extraCssText: 'border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);',
-        formatter(params: unknown) {
-          const list = (Array.isArray(params) ? params : [params]) as Array<{ dataIndex?: number }>
-          const idx = list[0]?.dataIndex ?? 0
-          const b = bars[idx]
-          if (!b) return ''
-          const timeStr = new Date(b.time).toLocaleString('ko-KR', {
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-          return (
-            `<div style="font-weight:600;margin-bottom:6px">${timeStr}</div>` +
-            `<div>전송량 <b>${b.volume.toLocaleString()}</b> Wh</div>` +
-            `<div style="font-size:11px;color:${fgSubtle};margin-top:4px">${b.count}회 전송</div>`
-          )
-        },
-      },
-      xAxis: {
-        type: 'time',
-        axisLine: { lineStyle: { color: '#7a7a7a' } },
-        axisLabel: { color: fgSubtle, fontSize: 9 },
-        axisTick: { show: false },
-      },
-      yAxis: {
-        type: 'value',
-        name: 'Wh',
-        nameTextStyle: { color: fgSubtle, fontSize: 10 },
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { color: fgSubtle, fontSize: 10 },
-        splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } },
-      },
-      dataZoom: [
-        {
-          type: 'inside',
-          xAxisIndex: 0,
-          filterMode: 'none',
-          zoomOnMouseWheel: true,
-          moveOnMouseMove: true,
-          moveOnMouseWheel: false,
-          preventDefaultMouseMove: true,
-          start: zoom.start,
-          end: zoom.end,
-        },
-        {
-          type: 'inside',
-          yAxisIndex: 0,
-          filterMode: 'none',
-          zoomOnMouseWheel: 'shift',
-          moveOnMouseMove: 'shift',
-          moveOnMouseWheel: false,
-          preventDefaultMouseMove: true,
-        },
-      ],
-      series: [
-        {
-          name: '전송량',
-          type: 'bar',
-          data: barData,
-          itemStyle: { color: barColor },
-          barMinWidth: BAR_MIN_WIDTH,
-          barMaxWidth: BAR_MAX_WIDTH,
-        },
-      ],
-    }
-  }, [bars, hasData, interval, zoom.end, zoom.start])
-
-  const chartHeight = isFullscreen ? 'calc(100dvh - 140px)' : 280
-
+function ChartPanel({
+  interval,
+  onIntervalChange,
+  cumulativeBadge,
+  subtitle,
+  viewRangeLabel,
+  hasData,
+  option,
+  onChartEvents,
+  chartHeight,
+  onZoomIn,
+  onZoomOut,
+  onReset,
+  onExpand,
+  expandLabel = '확장',
+  className = '',
+}: ChartPanelProps) {
   return (
-    <div
-      ref={containerRef}
-      className={`border border-border-strong rounded-lg bg-bg-base-opaque p-4 ${
-        isFullscreen ? 'h-dvh overflow-auto' : ''
-      }`}
-    >
-      <div className="flex flex-col gap-2 mb-3">
+    <div className={`flex flex-col min-h-0 ${className}`}>
+      <div className="flex flex-col gap-2 mb-3 shrink-0">
         <div className="flex flex-wrap items-center gap-1">
           {CANDLE_INTERVAL_TABS.map((t) => (
             <PeriodTabButton
               key={t.key}
               active={interval === t.key}
-              onClick={() => setCandleInterval(t.key)}
+              onClick={() => onIntervalChange(t.key)}
             >
               {t.label}
             </PeriodTabButton>
@@ -302,43 +147,294 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <p className="text-[10px] text-fg-muted">{subtitle}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2 shrink-0">
+        <div className="min-w-0">
+          <p className="text-[10px] text-fg-muted">{subtitle}</p>
+          {hasData && (
+            <p className="text-[9px] text-fg-muted/80 font-mono truncate">{viewRangeLabel}</p>
+          )}
+        </div>
         {hasData && (
           <div className="flex flex-wrap items-center gap-1 shrink-0">
-            <ChartToolButton label="확대" title="시간축 확대" onClick={zoomIn}>
+            <ChartToolButton label="확대" title="시간 구간 좁히기" onClick={onZoomIn}>
               <ZoomIn className="w-3.5 h-3.5" />
             </ChartToolButton>
-            <ChartToolButton label="축소" title="시간축 축소" onClick={zoomOut}>
+            <ChartToolButton label="축소" title="더 넓은 시간 구간 보기" onClick={onZoomOut}>
               <ZoomOut className="w-3.5 h-3.5" />
             </ChartToolButton>
             <ChartToolButton
               label="기본값"
               title={`${getDefaultWindowLabel(interval)}으로 복원`}
-              onClick={resetZoom}
+              onClick={onReset}
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </ChartToolButton>
-            <ChartToolButton label="전체화면" title="차트 전체화면" onClick={toggleFullscreen}>
-              <Expand className="w-3.5 h-3.5" />
+            <ChartToolButton label={expandLabel} title="차트 영역 확장" onClick={onExpand}>
+              <Maximize2 className="w-3.5 h-3.5" />
             </ChartToolButton>
           </div>
         )}
       </div>
 
-      {hasData ? (
-        <ReactECharts
-          option={option}
-          style={{ height: chartHeight, minHeight: 280 }}
-          opts={{ renderer: 'svg' }}
-          notMerge
-          onEvents={onChartEvents}
-        />
-      ) : (
-        <div className="h-[280px] flex items-center justify-center text-sm text-fg-muted">
-          기록된 데이터가 없습니다
-        </div>
-      )}
+      <div className="flex-1 min-h-0">
+        {hasData ? (
+          <ReactECharts
+            option={option}
+            style={{ height: chartHeight, width: '100%', minHeight: 280 }}
+            opts={{ renderer: 'svg' }}
+            notMerge
+            onEvents={onChartEvents}
+          />
+        ) : (
+          <div className="h-[280px] flex items-center justify-center text-sm text-fg-muted">
+            기록된 데이터가 없습니다
+          </div>
+        )}
+      </div>
     </div>
+  )
+}
+
+export default function EnergyChart({ readings, cumulativeBadge }: Props) {
+  const [interval, setCandleInterval] = useState<CandleInterval>('tick')
+  const [isExpanded, setIsExpanded] = useState(false)
+  const userControlledView = useRef(false)
+  const prevBarCountRef = useRef(0)
+
+  const deltaReadings = useMemo(() => toDeltaReadings(readings), [readings])
+  const rawBars = useMemo(() => buildVolumeBars(deltaReadings, interval), [deltaReadings, interval])
+  const extent = useMemo(() => getNavExtent(rawBars), [rawBars])
+  const hasData = rawBars.length > 0
+
+  const [timeView, setTimeView] = useState<TimeView>(() => defaultTimeView('tick', Date.now()))
+
+  const applyDefaultView = useCallback((iv: CandleInterval, endMs: number) => {
+    userControlledView.current = false
+    setTimeView(defaultTimeView(iv, endMs))
+  }, [])
+
+  useEffect(() => {
+    applyDefaultView(interval, extent.navEndMs)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interval])
+
+  useEffect(() => {
+    if (!rawBars.length) {
+      prevBarCountRef.current = 0
+      return
+    }
+    if (prevBarCountRef.current === 0 && !userControlledView.current) {
+      applyDefaultView(interval, extent.navEndMs)
+    }
+    prevBarCountRef.current = rawBars.length
+  }, [rawBars.length, interval, extent.navEndMs, applyDefaultView])
+
+  useEffect(() => {
+    if (!isExpanded) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [isExpanded])
+
+  const clampedView = useMemo(() => clampTimeView(timeView, extent), [timeView, extent])
+  const { startMs, endMs } = useMemo(() => getViewRange(clampedView), [clampedView])
+  const displayBars = useMemo(
+    () => barsForView(rawBars, interval, startMs, endMs),
+    [rawBars, interval, startMs, endMs],
+  )
+  const subtitle = useMemo(() => getVolumeSubtitle(interval, rawBars.length), [interval, rawBars.length])
+  const viewRangeLabel = formatAxisRange(startMs, endMs)
+
+  const markUserView = useCallback((updater: (v: TimeView) => TimeView) => {
+    userControlledView.current = true
+    setTimeView((prev) => updater(prev))
+  }, [])
+
+  const zoomIn = useCallback(() => {
+    markUserView((v) => zoomInView(v, extent))
+  }, [markUserView, extent])
+
+  const zoomOut = useCallback(() => {
+    markUserView((v) => zoomOutView(v, extent))
+  }, [markUserView, extent])
+
+  const resetView = useCallback(() => {
+    applyDefaultView(interval, extent.navEndMs)
+  }, [applyDefaultView, interval, extent.navEndMs])
+
+  const onChartEvents = useMemo(
+    () => ({
+      datazoom: (e: unknown) => {
+        const ev = e as {
+          batch?: Array<{ startValue?: number; endValue?: number }>
+          startValue?: number
+          endValue?: number
+        }
+        const payload = ev.batch?.[0] ?? ev
+        if (payload.startValue == null || payload.endValue == null) return
+        userControlledView.current = true
+        setTimeView(
+          clampTimeView(
+            {
+              viewEndMs: payload.endValue,
+              windowMs: payload.endValue - payload.startValue,
+            },
+            extent,
+          ),
+        )
+      },
+    }),
+    [extent],
+  )
+
+  const option = useMemo((): EChartsOption => {
+    if (!hasData) return {}
+
+    const barData = displayBars.map((b) => [b.time, b.volume])
+
+    return {
+      animation: false,
+      grid: { left: 56, right: 16, top: 20, bottom: 36 },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        backgroundColor: tooltipBg,
+        borderColor: tooltipBorder,
+        borderWidth: 1,
+        padding: [8, 12],
+        textStyle: { color: fgBase, fontSize: 12 },
+        extraCssText: 'border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);',
+        formatter(params: unknown) {
+          const list = (Array.isArray(params) ? params : [params]) as Array<{ dataIndex?: number }>
+          const idx = list[0]?.dataIndex ?? 0
+          const b = displayBars[idx]
+          if (!b) return ''
+          const timeStr = new Date(b.time).toLocaleString('ko-KR', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+          if (b.volume === 0 && b.count === 0) {
+            return `<div style="font-weight:600">${timeStr}</div><div style="font-size:11px;color:${fgSubtle}">전송 없음</div>`
+          }
+          return (
+            `<div style="font-weight:600;margin-bottom:6px">${timeStr}</div>` +
+            `<div>전송량 <b>${b.volume.toLocaleString()}</b> Wh</div>` +
+            `<div style="font-size:11px;color:${fgSubtle};margin-top:4px">${b.count}회 전송</div>`
+          )
+        },
+      },
+      xAxis: {
+        type: 'time',
+        min: extent.navStartMs,
+        max: extent.navEndMs,
+        axisLine: { lineStyle: { color: '#7a7a7a' } },
+        axisLabel: { color: fgSubtle, fontSize: 9 },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: 'value',
+        name: 'Wh',
+        nameTextStyle: { color: fgSubtle, fontSize: 10 },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: fgSubtle, fontSize: 10 },
+        splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } },
+      },
+      dataZoom: [
+        {
+          type: 'inside',
+          xAxisIndex: 0,
+          filterMode: 'none',
+          zoomOnMouseWheel: true,
+          moveOnMouseMove: true,
+          moveOnMouseWheel: false,
+          preventDefaultMouseMove: true,
+          minValueSpan: 15 * 60 * 1000,
+          startValue: startMs,
+          endValue: endMs,
+        },
+        {
+          type: 'inside',
+          yAxisIndex: 0,
+          filterMode: 'none',
+          zoomOnMouseWheel: 'shift',
+          moveOnMouseMove: 'shift',
+          moveOnMouseWheel: false,
+          preventDefaultMouseMove: true,
+        },
+      ],
+      series: [
+        {
+          name: '전송량',
+          type: 'bar',
+          data: barData,
+          itemStyle: { color: barColor },
+          barMinWidth: BAR_MIN_WIDTH,
+          barMaxWidth: BAR_MAX_WIDTH,
+        },
+      ],
+    }
+  }, [displayBars, extent.navEndMs, extent.navStartMs, hasData, startMs, endMs])
+
+  const panelProps: ChartPanelProps = {
+    interval,
+    onIntervalChange: setCandleInterval,
+    cumulativeBadge,
+    subtitle,
+    viewRangeLabel,
+    hasData,
+    option,
+    onChartEvents,
+    onZoomIn: zoomIn,
+    onZoomOut: zoomOut,
+    onReset: resetView,
+    onExpand: () => setIsExpanded(true),
+    chartHeight: 280,
+  }
+
+  const expandedPanel = isExpanded
+    ? createPortal(
+        <div className="fixed inset-0 z-50 flex flex-col bg-bg-base/95 backdrop-blur-sm">
+          <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-border-strong bg-bg-base-opaque">
+            <div>
+              <h2 className="text-sm font-bold text-fg-base">전력 전송량 차트</h2>
+              <p className="text-[10px] text-fg-muted mt-0.5">{viewRangeLabel}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsExpanded(false)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-strong text-xs font-medium text-fg-muted hover:text-fg-base hover:bg-bg-subtle transition-colors"
+            >
+              <Minimize2 className="w-4 h-4" />
+              축소
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 p-4 overflow-hidden">
+            <div className="h-full border border-border-strong rounded-lg bg-bg-base-opaque p-4 flex flex-col">
+              <ChartPanel
+                {...panelProps}
+                chartHeight="100%"
+                expandLabel="축소"
+                onExpand={() => setIsExpanded(false)}
+                className="h-full"
+              />
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null
+
+  return (
+    <>
+      <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
+        <ChartPanel {...panelProps} />
+      </div>
+      {expandedPanel}
+    </>
   )
 }
