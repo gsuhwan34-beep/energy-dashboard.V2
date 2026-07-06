@@ -9,6 +9,7 @@ export const STORAGE_PAYER_WALLET = 'emeter:payer-wallet'
 export const STORAGE_SUPPLIER_RATE = 'emeter:supplier-rate'
 
 export const DEMO_CONSUMER_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
+export const DEFAULT_PRODUCER_WALLET = '0xf0ec049222DF1CC4547a3BAA403DE80597DebB8D'
 
 export interface HourCell {
   hour: number

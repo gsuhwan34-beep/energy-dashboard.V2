@@ -219,7 +219,7 @@ export default function EnergyChart({
 
     return {
       animation: false,
-      grid: { left: 56, right: 16, top: 20, bottom: 36 },
+      grid: { left: 56, right: 16, top: 20, bottom: 36, containLabel: true },
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'shadow' },
@@ -292,6 +292,7 @@ export default function EnergyChart({
           name: volumeLabel,
           type: 'bar',
           data: barData,
+          clip: true,
           itemStyle: { color: barColor },
           barMinWidth: BAR_MIN_WIDTH,
           barMaxWidth: BAR_MAX_WIDTH,
@@ -402,15 +403,17 @@ export default function EnergyChart({
             )}
           </div>
 
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-hidden">
             {hasData ? (
-              <ReactECharts
-                option={option}
-                style={{ height: chartHeight, width: '100%' }}
-                opts={{ renderer: 'svg' }}
-                notMerge
-                onEvents={onChartEvents}
-              />
+              <div className="h-full w-full overflow-hidden">
+                <ReactECharts
+                  option={option}
+                  style={{ height: chartHeight, width: '100%' }}
+                  opts={{ renderer: 'svg' }}
+                  notMerge
+                  onEvents={onChartEvents}
+                />
+              </div>
             ) : (
               <div
                 className="flex items-center justify-center text-sm text-fg-muted"

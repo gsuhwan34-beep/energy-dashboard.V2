@@ -10,7 +10,7 @@ import TransactionTable from '../components/TransactionTable'
 import ProducerSalesTable from '../components/ProducerSalesTable'
 import { Sun, RefreshCw, Search, AlertCircle, Save, Wallet, CheckCircle2 } from 'lucide-react'
 import { api } from '../lib/api'
-import { writeStoredWallet, STORAGE_PRODUCER_WALLET, STORAGE_SUPPLIER_RATE } from '../lib/presentation'
+import { writeStoredWallet, STORAGE_PRODUCER_WALLET, STORAGE_SUPPLIER_RATE, DEFAULT_PRODUCER_WALLET } from '../lib/presentation'
 import { toProducerDeltaReadings, getProducerCumulativeWh } from '../lib/readingDelta'
 
 type WalletHook = ReturnType<typeof useWallet>
@@ -33,8 +33,8 @@ function writeStoredPrice(addr: string, price: number) {
 }
 
 export default function ProducerDashboard({ wallet }: Props) {
-  const [walletInput, setWalletInput] = useState('')
-  const [activeWallet, setActiveWallet] = useState('')
+  const [walletInput, setWalletInput] = useState(DEFAULT_PRODUCER_WALLET)
+  const [activeWallet, setActiveWallet] = useState(DEFAULT_PRODUCER_WALLET)
   const [weekAnchor, setWeekAnchor] = useState(() => new Date())
   const [unitRate, setUnitRate] = useState<number | ''>(150)
   const [isSaving, setIsSaving] = useState(false)
@@ -54,9 +54,8 @@ export default function ProducerDashboard({ wallet }: Props) {
   }, [wallet.address, activeWallet])
 
   useEffect(() => {
-    if (activeWallet) writeStoredWallet(STORAGE_PRODUCER_WALLET, activeWallet)
-    else if (wallet.address) writeStoredWallet(STORAGE_PRODUCER_WALLET, wallet.address)
-  }, [activeWallet, wallet.address])
+    writeStoredWallet(STORAGE_PRODUCER_WALLET, activeWallet || DEFAULT_PRODUCER_WALLET)
+  }, [activeWallet])
 
   useEffect(() => {
     if (data?.ratePerKwh != null && !priceDirtyRef.current && canEditPrice) {
