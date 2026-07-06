@@ -328,7 +328,6 @@ app.get('/api/producer', async (req, res) => {
     const productions = logs.map((log) => {
       const timestamp = Number(log.args[2]);
       const powerValue = normalizePowerValue(log.args[1], timestamp);
-      totalWh += powerValue;
       return {
         txHash: log.transactionHash,
         blockNumber: log.blockNumber,
@@ -345,6 +344,8 @@ app.get('/api/producer', async (req, res) => {
       return a.logIndex - b.logIndex;
     });
 
+    // 생산자 미터는 누적 적산 — 총량은 마지막 값
+    totalWh = productions.length > 0 ? productions[productions.length - 1].wh : 0;
     totalWh = Number(totalWh.toFixed(4));
     const totalProductionKWh = totalWh / 1000;
 

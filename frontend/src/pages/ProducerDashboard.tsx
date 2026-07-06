@@ -11,7 +11,7 @@ import ProducerSalesTable from '../components/ProducerSalesTable'
 import { Sun, RefreshCw, Search, AlertCircle, Save, Wallet, CheckCircle2 } from 'lucide-react'
 import { api } from '../lib/api'
 import { writeStoredWallet, STORAGE_PRODUCER_WALLET, STORAGE_SUPPLIER_RATE } from '../lib/presentation'
-import { toDeltaReadings, getCumulativeWh } from '../lib/readingDelta'
+import { toProducerDeltaReadings, getProducerCumulativeWh } from '../lib/readingDelta'
 
 type WalletHook = ReturnType<typeof useWallet>
 
@@ -109,8 +109,9 @@ export default function ProducerDashboard({ wallet }: Props) {
 
   const overview = data?.overview
   const productions = data?.productions ?? []
-  const deltaProductions = useMemo(() => toDeltaReadings(productions), [productions])
-  const totalProductionKWh = getCumulativeWh(productions) / 1000
+  const deltaProductions = useMemo(() => toProducerDeltaReadings(productions), [productions])
+  const cumulativeProductionWh = getProducerCumulativeWh(productions)
+  const totalProductionKWh = cumulativeProductionWh / 1000
   const soldKWh = overview?.soldKWh ?? 0
   const availableKWh = Math.max(0, Number((totalProductionKWh - soldKWh).toFixed(6)))
   const availableWh = Number((availableKWh * 1000).toFixed(4))
@@ -213,7 +214,7 @@ export default function ProducerDashboard({ wallet }: Props) {
             <StatCard
               label="총 생산량"
               value={`${totalProductionKWh.toFixed(4)} kWh`}
-              sub={`${getCumulativeWh(productions).toLocaleString()} Wh · ${overview?.totalReadings ?? 0}회 기록`}
+              sub={`${cumulativeProductionWh.toLocaleString()} Wh 누적 · ${overview?.totalReadings ?? 0}회 온체인`}
               accent
             />
             <StatCard
@@ -231,12 +232,15 @@ export default function ProducerDashboard({ wallet }: Props) {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <div className="lg:col-span-2 space-y-4">
               <EnergyChart
-                readings={productions}
+                readings={deltaProductions}
+                readingsAreDelta
+                volumeLabel="5분 발전량"
+                chartTitle="발전량 차트"
                 cumulativeBadge={{
                   label: '판매 가능 잔여',
                   kWh: availableKWh,
                   wh: availableWh,
-                  hint: '정산 시 감소',
+                  hint: `누적 ${cumulativeProductionWh.toLocaleString()} Wh · 정산 시 감소`,
                 }}
               />
               <DashboardHeatmap
@@ -262,7 +266,12 @@ export default function ProducerDashboard({ wallet }: Props) {
             />
           </div>
 
-          <TransactionTable readings={deltaProductions} showDeltaLabel />
+          <TransactionTable
+            readings={deltaProductions}
+            showDeltaLabel
+            title="온체인 발전 기록"
+            whColumnLabel="5분 발전량 (Wh)"
+          />
         </>
       )}
 

@@ -7,12 +7,19 @@ import InfoTooltip, { BLOCKCHAIN_TIPS } from './InfoTooltip'
 interface Props {
   readings: EnergyReading[]
   showDeltaLabel?: boolean
+  title?: string
+  whColumnLabel?: string
 }
 
 const EXPLORER = 'https://sepolia.arbiscan.io/tx/'
 const PAGE_SIZE = 10
 
-export default function TransactionTable({ readings, showDeltaLabel }: Props) {
+export default function TransactionTable({
+  readings,
+  showDeltaLabel,
+  title = '전송 기록',
+  whColumnLabel,
+}: Props) {
   const [page, setPage] = useState(0)
 
   const sorted = useMemo(() => [...readings].reverse(), [readings])
@@ -23,8 +30,8 @@ export default function TransactionTable({ readings, showDeltaLabel }: Props) {
   if (!readings.length) {
     return (
       <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
-        <h3 className="text-sm font-semibold text-fg-base mb-3">전송 기록</h3>
-        <p className="text-xs text-fg-muted py-6 text-center">전송 기록이 없습니다.</p>
+        <h3 className="text-sm font-semibold text-fg-base mb-3">{title}</h3>
+        <p className="text-xs text-fg-muted py-6 text-center">{title}이 없습니다.</p>
       </div>
     )
   }
@@ -33,7 +40,7 @@ export default function TransactionTable({ readings, showDeltaLabel }: Props) {
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
         <div>
-          <h3 className="text-sm font-semibold text-fg-base">전송 기록</h3>
+          <h3 className="text-sm font-semibold text-fg-base">{title}</h3>
           <span className="text-[10px] text-fg-muted">{readings.length}건</span>
         </div>
         <OnChainExplainer variant="light" compact />
@@ -48,7 +55,10 @@ export default function TransactionTable({ readings, showDeltaLabel }: Props) {
               </th>
               <th className="text-left py-2 pr-3 font-medium">시간</th>
               <th className="text-right py-2 pr-3 font-medium">
-                <InfoTooltip label={showDeltaLabel ? '차분 (Wh)' : '전력량 (Wh)'} tip={BLOCKCHAIN_TIPS.wh} />
+                <InfoTooltip
+                  label={whColumnLabel ?? (showDeltaLabel ? '차분 (Wh)' : '전력량 (Wh)')}
+                  tip={BLOCKCHAIN_TIPS.wh}
+                />
               </th>
               <th className="text-right py-2 pr-3 font-medium">
                 <InfoTooltip label="블록" tip={BLOCKCHAIN_TIPS.block} />

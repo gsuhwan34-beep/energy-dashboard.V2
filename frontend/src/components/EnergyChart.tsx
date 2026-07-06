@@ -22,7 +22,7 @@ import {
   zoomInView,
   zoomOutView,
 } from '../lib/candleAggregation'
-import { toDeltaReadings } from '../lib/readingDelta'
+import { toDeltaReadings, sortReadings } from '../lib/readingDelta'
 
 interface CumulativeBadge {
   label: string
@@ -34,6 +34,12 @@ interface CumulativeBadge {
 interface Props {
   readings: EnergyReading[]
   cumulativeBadge?: CumulativeBadge
+  /** true면 readings가 이미 차분값(생산자 5분 발전량 등) */
+  readingsAreDelta?: boolean
+  /** 막대·툴팁 라벨 (기본: 전송량) */
+  volumeLabel?: string
+  /** 확장 모달 제목 */
+  chartTitle?: string
 }
 
 const tooltipBg = '#fff'
@@ -195,13 +201,22 @@ function ChartPanel({
   )
 }
 
-export default function EnergyChart({ readings, cumulativeBadge }: Props) {
+export default function EnergyChart({
+  readings,
+  cumulativeBadge,
+  readingsAreDelta = false,
+  volumeLabel = '전송량',
+  chartTitle = '전력 전송량 차트',
+}: Props) {
   const [interval, setCandleInterval] = useState<CandleInterval>('tick')
   const [isExpanded, setIsExpanded] = useState(false)
   const userControlledView = useRef(false)
   const prevBarCountRef = useRef(0)
 
-  const deltaReadings = useMemo(() => toDeltaReadings(readings), [readings])
+  const deltaReadings = useMemo(
+    () => (readingsAreDelta ? sortReadings(readings) : toDeltaReadings(readings)),
+    [readings, readingsAreDelta],
+  )
   const rawBars = useMemo(() => buildVolumeBars(deltaReadings, interval), [deltaReadings, interval])
   const extent = useMemo(() => getNavExtent(rawBars), [rawBars])
   const hasData = rawBars.length > 0
@@ -318,12 +333,12 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
             minute: '2-digit',
           })
           if (b.volume === 0 && b.count === 0) {
-            return `<div style="font-weight:600">${timeStr}</div><div style="font-size:11px;color:${fgSubtle}">전송 없음</div>`
+            return `<div style="font-weight:600">${timeStr}</div><div style="font-size:11px;color:${fgSubtle}">기록 없음</div>`
           }
           return (
             `<div style="font-weight:600;margin-bottom:6px">${timeStr}</div>` +
-            `<div>전송량 <b>${b.volume.toLocaleString()}</b> Wh</div>` +
-            `<div style="font-size:11px;color:${fgSubtle};margin-top:4px">${b.count}회 전송</div>`
+            `<div>${volumeLabel} <b>${b.volume.toLocaleString()}</b> Wh</div>` +
+            `<div style="font-size:11px;color:${fgSubtle};margin-top:4px">${b.count}회</div>`
           )
         },
       },
@@ -369,7 +384,7 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
       ],
       series: [
         {
-          name: '전송량',
+          name: volumeLabel,
           type: 'bar',
           data: barData,
           itemStyle: { color: barColor },
@@ -378,7 +393,7 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
         },
       ],
     }
-  }, [displayBars, extent.navEndMs, extent.navStartMs, hasData, startMs, endMs])
+  }, [displayBars, extent.navEndMs, extent.navStartMs, hasData, startMs, endMs, volumeLabel])
 
   const panelProps: ChartPanelProps = {
     interval,
@@ -401,7 +416,7 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
         <div className="fixed inset-0 z-50 flex flex-col bg-bg-base/95 backdrop-blur-sm">
           <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-border-strong bg-bg-base-opaque">
             <div>
-              <h2 className="text-sm font-bold text-fg-base">전력 전송량 차트</h2>
+              <h2 className="text-sm font-bold text-fg-base">{chartTitle}</h2>
               <p className="text-[10px] text-fg-muted mt-0.5">{viewRangeLabel}</p>
             </div>
             <button

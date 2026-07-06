@@ -21,12 +21,16 @@ export function isLikelyCumulative(readings: EnergyReading[]): boolean {
 /**
  * 누적 계량기 → 5분(전송) 간 차분 Wh.
  * 이미 차분값이면 그대로 유지.
+ * @param forceCumulative 생산자 등 온체인 값이 항상 누적일 때 true
  */
-export function toDeltaReadings(readings: EnergyReading[]): EnergyReading[] {
+export function toDeltaReadings(
+  readings: EnergyReading[],
+  forceCumulative = false,
+): EnergyReading[] {
   const sorted = sortReadings(readings)
   if (!sorted.length) return []
 
-  const cumulative = isLikelyCumulative(sorted)
+  const cumulative = forceCumulative || isLikelyCumulative(sorted)
 
   return sorted.map((r, i) => {
     let deltaWh = r.wh
@@ -41,6 +45,18 @@ export function toDeltaReadings(readings: EnergyReading[]): EnergyReading[] {
       kWh: Number((deltaWh / 1000).toFixed(6)),
     }
   })
+}
+
+/** 생산자: 온체인 powerValue는 항상 누적 적산 */
+export function toProducerDeltaReadings(readings: EnergyReading[]): EnergyReading[] {
+  return toDeltaReadings(readings, true)
+}
+
+/** 생산자 총 누적 Wh — 마지막 온체인 적산값 */
+export function getProducerCumulativeWh(readings: EnergyReading[]): number {
+  if (!readings.length) return 0
+  const sorted = sortReadings(readings)
+  return Number(sorted[sorted.length - 1].wh.toFixed(4))
 }
 
 /** 전체 누적 Wh (누적 계량기: 마지막 값, 차분: 합계) */
