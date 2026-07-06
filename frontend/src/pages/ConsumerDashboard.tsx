@@ -251,8 +251,6 @@ export default function ConsumerDashboard({ wallet }: Props) {
             <div className="lg:col-span-2 space-y-4">
               <EnergyChart
                 readings={readings}
-                anchorDate={weekAnchor}
-                onAnchorDateChange={setWeekAnchor}
                 cumulativeBadge={{
                   label: '누적 전력량',
                   kWh: totalKWh,

@@ -232,8 +232,6 @@ export default function ProducerDashboard({ wallet }: Props) {
             <div className="lg:col-span-2 space-y-4">
               <EnergyChart
                 readings={productions}
-                anchorDate={weekAnchor}
-                onAnchorDateChange={setWeekAnchor}
                 cumulativeBadge={{
                   label: '판매 가능 잔여',
                   kWh: availableKWh,
