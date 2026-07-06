@@ -110,6 +110,13 @@ export default function ProducerDashboard({ wallet }: Props) {
   const overview = data?.overview
   const productions = data?.productions ?? []
   const deltaProductions = useMemo(() => toProducerDeltaReadings(productions), [productions])
+  const deltaByTxKey = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const r of deltaProductions) {
+      map.set(`${r.txHash}-${r.logIndex}`, r.wh)
+    }
+    return map
+  }, [deltaProductions])
   const cumulativeProductionWh = getProducerCumulativeWh(productions)
   const totalProductionKWh = cumulativeProductionWh / 1000
   const soldKWh = overview?.soldKWh ?? 0
@@ -267,10 +274,11 @@ export default function ProducerDashboard({ wallet }: Props) {
           </div>
 
           <TransactionTable
-            readings={deltaProductions}
-            showDeltaLabel
+            readings={productions}
             title="온체인 발전 기록"
-            whColumnLabel="5분 발전량 (Wh)"
+            whColumnLabel="온체인 누적 (Wh)"
+            deltaByKey={deltaByTxKey}
+            deltaColumnLabel="5분 발전량 (Wh)"
           />
         </>
       )}

@@ -105,14 +105,16 @@ export function buildVolumeBars(readings: EnergyReading[], interval: CandleInter
 export function getNavExtent(bars: VolumeBar[]): NavExtent {
   const now = Date.now()
   const lastBar = bars.length ? bars[bars.length - 1].time : now
+  const firstBar = bars.length ? bars[0].time : now - MAX_NAV_HISTORY_MS
   const navEndMs = Math.max(lastBar, now)
-  const navStartMs = navEndMs - MAX_NAV_HISTORY_MS
+  const navStartMs = Math.min(firstBar - H, navEndMs - MAX_NAV_HISTORY_MS)
   return { navStartMs, navEndMs }
 }
 
-export function defaultTimeView(interval: CandleInterval, navEndMs: number): TimeView {
+export function defaultTimeView(interval: CandleInterval, extent: NavExtent, bars: VolumeBar[]): TimeView {
+  const lastMs = bars.length ? bars[bars.length - 1].time : extent.navEndMs
   return {
-    viewEndMs: navEndMs,
+    viewEndMs: lastMs,
     windowMs: DEFAULT_WINDOW_MS[interval],
   }
 }
@@ -188,6 +190,15 @@ export const BAR_MIN_WIDTH = 10
 export const BAR_MAX_WIDTH = 40
 
 export const ZOOM_FACTOR = 1.35
+
+export const EXPAND_WINDOW_FACTOR = 2
+
+export function expandWindowView(view: TimeView, extent: NavExtent): TimeView {
+  return clampTimeView(
+    { viewEndMs: view.viewEndMs, windowMs: view.windowMs * EXPAND_WINDOW_FACTOR },
+    extent,
+  )
+}
 
 export function zoomInView(view: TimeView, extent: NavExtent): TimeView {
   const nextWindow = Math.max(MIN_VIEW_MS, view.windowMs / ZOOM_FACTOR)

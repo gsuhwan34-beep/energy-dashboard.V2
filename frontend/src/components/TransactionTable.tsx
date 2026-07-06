@@ -9,6 +9,9 @@ interface Props {
   showDeltaLabel?: boolean
   title?: string
   whColumnLabel?: string
+  /** 온체인 누적 옆 5분 차분 (생산자) */
+  deltaByKey?: Map<string, number>
+  deltaColumnLabel?: string
 }
 
 const EXPLORER = 'https://sepolia.arbiscan.io/tx/'
@@ -19,6 +22,8 @@ export default function TransactionTable({
   showDeltaLabel,
   title = '전송 기록',
   whColumnLabel,
+  deltaByKey,
+  deltaColumnLabel = '5분 발전량 (Wh)',
 }: Props) {
   const [page, setPage] = useState(0)
 
@@ -60,6 +65,11 @@ export default function TransactionTable({
                   tip={BLOCKCHAIN_TIPS.wh}
                 />
               </th>
+              {deltaByKey && (
+                <th className="text-right py-2 pr-3 font-medium">
+                  <InfoTooltip label={deltaColumnLabel} tip="직전 전송 대비 해당 구간 발전량" />
+                </th>
+              )}
               <th className="text-right py-2 pr-3 font-medium">
                 <InfoTooltip label="블록" tip={BLOCKCHAIN_TIPS.block} />
               </th>
@@ -69,8 +79,11 @@ export default function TransactionTable({
             </tr>
           </thead>
           <tbody>
-            {pageItems.map(tx => (
-              <tr key={`${tx.txHash}-${tx.logIndex}`} className="border-b border-border-base hover:bg-bg-subtle/50 transition-colors">
+            {pageItems.map(tx => {
+              const rowKey = `${tx.txHash}-${tx.logIndex}`
+              const deltaWh = deltaByKey?.get(rowKey)
+              return (
+              <tr key={rowKey} className="border-b border-border-base hover:bg-bg-subtle/50 transition-colors">
                 <td className="py-2.5 pr-3">
                   <a
                     href={`${EXPLORER}${tx.txHash}`}
@@ -86,8 +99,13 @@ export default function TransactionTable({
                   {new Date(tx.timestamp * 1000).toLocaleString('ko-KR')}
                 </td>
                 <td className="py-2.5 pr-3 text-right font-mono text-fg-base font-semibold">
-                  {tx.wh}
+                  {tx.wh.toLocaleString()}
                 </td>
+                {deltaByKey && (
+                  <td className="py-2.5 pr-3 text-right font-mono text-fg-subtle">
+                    {deltaWh != null ? deltaWh.toLocaleString() : '-'}
+                  </td>
+                )}
                 <td className="py-2.5 pr-3 text-right font-mono text-fg-subtle">
                   {tx.blockNumber.toLocaleString()}
                 </td>
@@ -107,7 +125,7 @@ export default function TransactionTable({
                   )}
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       </div>
