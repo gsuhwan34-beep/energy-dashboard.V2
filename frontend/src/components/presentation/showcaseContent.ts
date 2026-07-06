@@ -180,6 +180,7 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     shortDesc:
       '잉여 전력과 탄소 배출권을 토큰 자산으로 유동화하여, 거대 중개 기관 없이 개인 간 수수료 0원으로 직거래하는 친환경 금융 시장을 엽니다.',
     imageCaption: 'P2P 직거래 · RWA 토큰화',
+    heroImage: '/presentation/p2p-rwa-platform.png',
     detailTitle: '중개자 없는 거래와 자산 토큰화 (P2P & RWA)',
     summaryBullets: [
       {
