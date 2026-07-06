@@ -288,7 +288,7 @@ export default function CoreValuesBento() {
               {autoPlay ? <Pause size={14} /> : <Play size={14} />}
             </button>
           </div>
-          <h1 className="text-lg font-black text-slate-900">핵심 가치 5선</h1>
+          <h1 className="text-lg font-black text-slate-900 leading-tight">차세대 전력망의 5가지 혁신</h1>
           <p className="text-[10px] text-slate-500 mt-1">6초마다 자동 전환 · 탭 클릭 시 상세</p>
         </div>
 
@@ -350,7 +350,7 @@ export default function CoreValuesBento() {
                   </span>
                   <span className="text-[9px] font-semibold text-slate-400 uppercase">{tab.tagline}</span>
                 </div>
-                <h2 className="text-base md:text-lg font-black text-slate-900 leading-tight">{tab.title}</h2>
+                <h2 className="text-base md:text-lg font-black text-slate-900 leading-tight">{tab.detailTitle}</h2>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">{tab.shortDesc}</p>
                 <p className={`text-[10px] font-semibold mt-1.5 ${accent.text}`}>
                   탭하여 상세 보기 →

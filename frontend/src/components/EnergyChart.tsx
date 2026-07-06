@@ -4,8 +4,8 @@ import type { EnergyReading } from '../hooks/useEnergyData'
 import { PeriodTabButton } from './ChartPeriodCalendar'
 import {
   type CandleInterval,
-  buildCandles,
-  getCandleSubtitle,
+  buildVolumeBars,
+  getVolumeSubtitle,
   CANDLE_INTERVAL_TABS,
 } from '../lib/candleAggregation'
 import { toDeltaReadings } from '../lib/readingDelta'
@@ -26,40 +26,27 @@ const tooltipBg = '#fff'
 const tooltipBorder = 'rgba(42,42,42,0.08)'
 const fgBase = '#212121'
 const fgSubtle = '#7a7a7a'
-const upColor = '#fd4b96'
-const downColor = '#3b82f6'
-const volUp = 'rgba(253,75,150,0.45)'
-const volDown = 'rgba(59,130,246,0.45)'
+const barColor = 'rgba(253,75,150,0.65)'
 
 export default function EnergyChart({ readings, cumulativeBadge }: Props) {
-  const [interval, setCandleInterval] = useState<CandleInterval>('tick')
+  const [interval, setInterval] = useState<CandleInterval>('tick')
 
   const deltaReadings = useMemo(() => toDeltaReadings(readings), [readings])
-  const candles = useMemo(() => buildCandles(deltaReadings, interval), [deltaReadings, interval])
-  const subtitle = useMemo(() => getCandleSubtitle(interval, candles.length), [interval, candles.length])
-  const hasData = candles.length > 0
+  const bars = useMemo(() => buildVolumeBars(deltaReadings, interval), [deltaReadings, interval])
+  const subtitle = useMemo(() => getVolumeSubtitle(interval, bars.length), [interval, bars.length])
+  const hasData = bars.length > 0
 
   const option = useMemo(() => {
     if (!hasData) return {}
 
-    const candleData = candles.map((c) => [c.time, c.open, c.close, c.low, c.high])
-    const volumeData = candles.map((c) => ({
-      value: [c.time, c.volume],
-      itemStyle: {
-        color: c.close >= c.open ? volUp : volDown,
-      },
-    }))
+    const barData = bars.map((b) => [b.time, b.volume])
 
     return {
       animation: false,
-      axisPointer: { link: [{ xAxisIndex: [0, 1] }] },
-      grid: [
-        { left: 56, right: 16, top: 20, height: '56%' },
-        { left: 56, right: 16, top: '76%', height: '14%' },
-      ],
+      grid: { left: 56, right: 16, top: 20, bottom: 36 },
       tooltip: {
         trigger: 'axis' as const,
-        axisPointer: { type: 'cross' as const },
+        axisPointer: { type: 'shadow' as const },
         backgroundColor: tooltipBg,
         borderColor: tooltipBorder,
         borderWidth: 1,
@@ -69,9 +56,9 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
         formatter(params: unknown) {
           const list = (Array.isArray(params) ? params : [params]) as Array<{ dataIndex?: number }>
           const idx = list[0]?.dataIndex ?? 0
-          const c = candles[idx]
-          if (!c) return ''
-          const timeStr = new Date(c.time).toLocaleString('ko-KR', {
+          const b = bars[idx]
+          if (!b) return ''
+          const timeStr = new Date(b.time).toLocaleString('ko-KR', {
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
@@ -79,86 +66,44 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
           })
           return (
             `<div style="font-weight:600;margin-bottom:6px">${timeStr}</div>` +
-            `<div style="font-size:11px;color:${fgSubtle}">시 ${c.open} · 고 ${c.high} · 저 ${c.low} · 종 ${c.close} Wh</div>` +
-            `<div style="font-size:11px;margin-top:4px">거래량 <b>${c.volume}</b> Wh · ${c.count}회</div>`
+            `<div>전송량 <b>${b.volume.toLocaleString()}</b> Wh</div>` +
+            `<div style="font-size:11px;color:${fgSubtle};margin-top:4px">${b.count}회 전송</div>`
           )
         },
       },
-      xAxis: [
-        {
-          type: 'time' as const,
-          gridIndex: 0,
-          axisLine: { lineStyle: { color: '#7a7a7a' } },
-          axisLabel: { show: false },
-          axisTick: { show: false },
-          splitLine: { show: false },
-        },
-        {
-          type: 'time' as const,
-          gridIndex: 1,
-          axisLine: { lineStyle: { color: '#7a7a7a' } },
-          axisLabel: { color: fgSubtle, fontSize: 9 },
-          axisTick: { show: false },
-        },
-      ],
-      yAxis: [
-        {
-          type: 'value' as const,
-          gridIndex: 0,
-          scale: true,
-          name: 'Wh',
-          nameTextStyle: { color: fgSubtle, fontSize: 10 },
-          axisLine: { show: false },
-          axisTick: { show: false },
-          axisLabel: { color: fgSubtle, fontSize: 10 },
-          splitLine: { lineStyle: { type: 'dashed' as const, color: '#f0f0f0' } },
-        },
-        {
-          type: 'value' as const,
-          gridIndex: 1,
-          scale: true,
-          name: 'Vol',
-          nameTextStyle: { color: fgSubtle, fontSize: 9 },
-          axisLine: { show: false },
-          axisTick: { show: false },
-          axisLabel: { color: fgSubtle, fontSize: 9, formatter: (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)) },
-          splitNumber: 2,
-          splitLine: { show: false },
-        },
-      ],
+      xAxis: {
+        type: 'time' as const,
+        axisLine: { lineStyle: { color: '#7a7a7a' } },
+        axisLabel: { color: fgSubtle, fontSize: 9 },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: 'value' as const,
+        name: 'Wh',
+        nameTextStyle: { color: fgSubtle, fontSize: 10 },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: fgSubtle, fontSize: 10 },
+        splitLine: { lineStyle: { type: 'dashed' as const, color: '#f0f0f0' } },
+      },
       dataZoom: [
         {
           type: 'inside' as const,
-          xAxisIndex: [0, 1],
-          start: candles.length > 80 ? Math.max(0, 100 - (80 / candles.length) * 100) : 0,
+          start: bars.length > 80 ? Math.max(0, 100 - (80 / bars.length) * 100) : 0,
           end: 100,
         },
       ],
       series: [
         {
-          name: '전력',
-          type: 'candlestick',
-          xAxisIndex: 0,
-          yAxisIndex: 0,
-          data: candleData,
-          itemStyle: {
-            color: upColor,
-            color0: downColor,
-            borderColor: upColor,
-            borderColor0: downColor,
-          },
-        },
-        {
-          name: '거래량',
+          name: '전송량',
           type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          data: volumeData,
+          data: barData,
+          itemStyle: { color: barColor },
           barMaxWidth: interval === 'tick' ? 8 : 24,
         },
       ],
     }
-  }, [candles, hasData, interval])
+  }, [bars, hasData, interval])
 
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque p-4">
@@ -168,7 +113,7 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
             <PeriodTabButton
               key={t.key}
               active={interval === t.key}
-              onClick={() => setCandleInterval(t.key)}
+              onClick={() => setInterval(t.key)}
             >
               {t.label}
             </PeriodTabButton>
@@ -197,9 +142,9 @@ export default function EnergyChart({ readings, cumulativeBadge }: Props) {
       <p className="text-[10px] text-fg-muted mb-2">{subtitle}</p>
 
       {hasData ? (
-        <ReactECharts option={option} style={{ height: 320 }} opts={{ renderer: 'svg' }} notMerge />
+        <ReactECharts option={option} style={{ height: 280 }} opts={{ renderer: 'svg' }} notMerge />
       ) : (
-        <div className="h-[320px] flex items-center justify-center text-sm text-fg-muted">
+        <div className="h-[280px] flex items-center justify-center text-sm text-fg-muted">
           기록된 데이터가 없습니다
         </div>
       )}

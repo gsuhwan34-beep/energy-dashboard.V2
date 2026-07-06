@@ -1,19 +1,49 @@
 import { FileText } from 'lucide-react'
 import type { ShowcaseTab, SummarySegment } from './showcaseContent'
 import { ACCENT_STYLES } from './showcaseContent'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
+
+function SegmentSpan({ segment, accentText }: { segment: SummarySegment; accentText: string }) {
+  const className = [
+    segment.bold ? `font-bold ${accentText}` : '',
+    segment.underline ? 'underline decoration-dotted underline-offset-[3px] cursor-help' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const inner = <span className={className || undefined}>{segment.text}</span>
+
+  if (segment.tooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            tabIndex={0}
+            className={className || undefined}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {segment.text}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          className="max-w-[280px] text-left leading-relaxed bg-white text-slate-700 border-slate-200 shadow-lg"
+        >
+          {segment.tooltip}
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return inner
+}
 
 function BulletText({ segments, accentText }: { segments: SummarySegment[]; accentText: string }) {
   return (
     <p className="text-[15px] text-slate-600 leading-relaxed">
-      {segments.map((s, i) =>
-        s.bold ? (
-          <span key={i} className={`font-bold ${accentText}`}>
-            {s.text}
-          </span>
-        ) : (
-          <span key={i}>{s.text}</span>
-        ),
-      )}
+      {segments.map((s, i) => (
+        <SegmentSpan key={i} segment={s} accentText={accentText} />
+      ))}
     </p>
   )
 }
@@ -62,7 +92,7 @@ export function ShowcaseSummaryPanel({ tab, onOpenReport }: SummaryProps) {
         className={`shrink-0 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm text-white shadow-sm transition-opacity hover:opacity-90 ${accent.bg}`}
       >
         <FileText size={18} />
-        📄 관련 산업 리포트 읽기
+        📄상세 보고서 읽기
       </button>
     </div>
   )

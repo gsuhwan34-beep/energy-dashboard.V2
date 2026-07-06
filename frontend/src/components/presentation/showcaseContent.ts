@@ -8,9 +8,6 @@ import {
   ServerCrash,
   Network,
   Activity,
-  Building2,
-  Wallet,
-  Zap,
   FileWarning,
   BadgeCheck,
   Timer,
@@ -20,7 +17,8 @@ import {
   Globe,
   Landmark,
   Link2,
-  Activity,
+  Lock,
+  TrendingUp,
 } from 'lucide-react'
 
 export type TabAccent = 'blue' | 'amber' | 'emerald' | 'violet' | 'indigo'
@@ -28,6 +26,8 @@ export type TabAccent = 'blue' | 'amber' | 'emerald' | 'violet' | 'indigo'
 export interface SummarySegment {
   text: string
   bold?: boolean
+  underline?: boolean
+  tooltip?: string
 }
 
 export interface SummaryBullet {
@@ -102,7 +102,14 @@ export const ACCENT_STYLES: Record<
   },
 }
 
-const seg = (text: string, bold = false): SummarySegment => ({ text, bold })
+const GREENWASHING_TOOLTIP =
+  '실질적인 탄소 배출 감축이나 신재생에너지 확대 없이, 장부상의 수치나 제도의 허점을 이용해 재생에너지를 사용한 것처럼 위장하는 행위'
+
+const seg = (
+  text: string,
+  bold = false,
+  opts?: { underline?: boolean; tooltip?: string },
+): SummarySegment => ({ text, bold, ...opts })
 
 export const SHOWCASE_TABS: ShowcaseTab[] = [
   {
@@ -110,10 +117,11 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     icon: ShieldCheck,
     accent: 'blue',
     title: '단일 장애점(SPOF) 해소',
-    tagline: 'Zero-Trust · 무중단',
-    shortDesc: '중앙 서버 1대 장애 = 전국 정산 마비. 분산 블록체인으로 SPOF를 제거합니다.',
-    imageCaption: '중앙집중형 vs 분산형 — 단일 장애점 해소',
-    detailTitle: 'SPOF 해소 · 스마트 컨트랙트 자동화',
+    tagline: 'Zero-SPOF · 무중단',
+    shortDesc:
+      '중앙 서버 마비 시에도 100% 생존하는 블록체인 분산 노드와 RAM 기반 하드웨어 방어망으로 정산망을 보호합니다.',
+    imageCaption: '중앙집중형 vs 분산형 — Zero-SPOF',
+    detailTitle: '물리적 방어벽의 완성 (Zero-SPOF)',
     summaryBullets: [
       {
         icon: ServerCrash,
@@ -166,52 +174,71 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     id: 1,
     icon: ArrowRightLeft,
     accent: 'amber',
-    title: '중개인 없는 P2P 직거래',
-    tagline: '수수료 Zero · 1:1',
-    shortDesc: '플랫폼 마진 없이 프로슈머와 소비자가 MetaMask로 직접 전력·토큰을 교환합니다.',
-    imageCaption: '중개 독점 vs P2P 직거래 — 수수료 Zero',
-    detailTitle: 'P2P 분산 에너지 직거래',
+    title: 'P2P 직거래 및 자산 토큰화',
+    tagline: '수수료 Zero · RWA · 탄소 배출권',
+    shortDesc:
+      '잉여 전력과 탄소 배출권을 토큰 자산으로 유동화하여, 거대 중개 기관 없이 개인 간 수수료 0원으로 직거래하는 친환경 금융 시장을 엽니다.',
+    imageCaption: 'P2P 직거래 · RWA 토큰화',
+    detailTitle: '중개자 없는 거래와 자산 토큰화 (P2P & RWA)',
     summaryBullets: [
       {
-        icon: Building2,
+        icon: Lock,
         segments: [
-          seg('지붕 태양광 시대인데도 이웃에게 전기를 팔려면 한전·플랫폼 '),
-          seg('중개', true),
-          seg('를 꼭 거쳐야 하고, '),
-          seg('수수료·정산 지연', true),
-          seg('이 발생합니다.'),
+          seg('거대 기관이 독점하던 에너지 시장의 한계로 인해, 개인은 전력을 팔 때 '),
+          seg('막대한 중개 수수료', true),
+          seg('를 내야 했고 '),
+          seg('탄소 배출권', true),
+          seg(' 시장엔 '),
+          seg('참여조차 불가능', true),
+          seg('했습니다.'),
         ],
       },
       {
-        icon: Wallet,
+        icon: ArrowRightLeft,
         segments: [
-          seg('MetaMask만 연결하면 스마트 컨트랙트가 '),
-          seg('중개인 없이', true),
-          seg(' 생산자와 소비자를 '),
+          seg('Web3 지갑', true),
+          seg('을 연동하여 스마트 컨트랙트가 생산자와 소비자를 '),
           seg('1:1 자동 매칭', true),
-          seg('합니다.'),
+          seg('하고, 사용한 만큼 '),
+          seg('수수료 없이 100% 수익', true),
+          seg('을 정산합니다.'),
         ],
       },
       {
-        icon: Zap,
+        icon: TrendingUp,
         segments: [
-          seg('사용한 kWh만큼 '),
-          seg('(WON) 토큰', true),
-          seg('으로 즉시 결제 · 중개 수수료 없이 수익이 전부 생산자에게 돌아갑니다.'),
+          seg('더 나아가 눈에 보이지 않는 '),
+          seg('잉여 전력', true),
+          seg('과 '),
+          seg('탄소 배출권', true),
+          seg('을 실물 자산 토큰('),
+          seg('RWA', true),
+          seg(')으로 유동화하여, 누구나 스마트폰으로 거래할 수 있는 풍부한 유동성의 '),
+          seg('P2P 금융 시장', true),
+          seg('을 엽니다.'),
         ],
       },
     ],
-    reportTitle: '중개인 없는 P2P 분산 에너지 직거래',
+    reportTitle: '수수료 없는 P2P 전력 거래와 에너지 실물 자산 토큰화 (RWA)',
     reportSections: [
       {
         paragraphs: [
-          '미래의 에너지 패러다임은 거대 발전소가 에너지를 독점 공급하는 형태에서, 각 가정과 빌딩이 태양광 등을 통해 스스로 전기를 생산하고 소비하는 마이크로그리드(분산 에너지) 시대로 전환되고 있습니다. 하지만 현재는 내가 생산한 전기를 이웃에게 팔고 싶어도 접근성이 매우 떨어집니다. 한전이나 거대 플랫폼 사업자라는 중개인을 반드시 거쳐야 하며, 이 과정에서 막대한 수수료와 행정 처리 지연이 발생합니다.',
+          '미래의 에너지 패러다임은 각 가정이 스스로 전기를 생산하고 소비하는 마이크로그리드 시대로 전환되고 있습니다. 그러나 현재 개인이 생산한 전기를 이웃에게 팔기 위해서는 한전이나 거대 플랫폼 사업자를 반드시 거쳐야 하며, 이 과정에서 막대한 수수료와 정산 지연이 발생합니다. 또한, 개인이 창출해 낸 환경적 가치(탄소 배출권 등)는 거래 단위가 크고 규제가 복잡하여 B2B 대기업들만의 폐쇄적인 전유물로 전락해 있습니다.',
         ],
       },
       {
         paragraphs: [
-          '본 시스템은 Web3 지갑(MetaMask)을 연동하여 개개인의 에너지 거래 접근성을 극대화했습니다. 누구나 대시보드에 접속해 자신이 생산한 전력의 단가를 설정하면, 스마트 컨트랙트가 중개인 없이 소비자와 생산자를 1:1로 매칭해 줍니다.',
-          '측정된 전력량만큼 수수료 없이 토큰(WON)으로 즉각 결제되므로, 플랫폼 마진으로 빠져나가던 비용이 고스란히 개인(프로슈머)의 수익으로 돌아갑니다. 이는 민간 차원의 신재생 에너지 생산을 폭발적으로 유인하는 가장 강력한 경제적 인센티브 망이 될 것입니다.',
+          'MVP 그리드랩은 이 두 가지 진입 장벽을 블록체인 스마트 컨트랙트로 완전히 허물어냅니다. 첫째, 누구나 대시보드(Web3 지갑)에 접속해 단가를 설정하면 중개 기관 없이 생산자와 소비자가 1:1로 매칭됩니다. 측정된 전력량만큼 토큰(WON)으로 즉각 결제되므로 플랫폼 마진 없이 수익이 온전히 개인에게 돌아갑니다.',
+        ],
+      },
+      {
+        paragraphs: [
+          "둘째, 단순한 요금 정산을 넘어 잉여 전력과 탄소 감축 기여도를 '실물 자산 토큰(RWA, Real World Asset)'으로 발행(Minting)합니다. 무겁고 거대한 기업용 에너지 자산을 1원 단위로 조각내어, 일반 개인도 주식 앱을 켜듯 쉽게 환경 자산을 소유하고 실시간으로 매매할 수 있는 유동 자산으로 변환하는 것입니다.",
+        ],
+      },
+      {
+        paragraphs: [
+          "결론적으로 본 시스템은, 수수료 0원의 '초연결 에너지 직거래망'을 구축함과 동시에 경직된 거대 탄소 시장을 '고유동성 P2P 친환경 투자 시장'으로 혁신합니다. 이는 민간 차원의 신재생 에너지 생산을 유인하는 가장 강력한 경제적 인센티브가 될 것입니다.",
         ],
       },
     ],
@@ -220,11 +247,12 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     id: 2,
     icon: Leaf,
     accent: 'emerald',
-    title: 'RE100 인증 프리패스',
-    tagline: '시간·비용 Zero',
-    shortDesc: '수개월 REC 실사 대신, 계측 즉시 온체인 기록 = 녹색 전력 증명 완료.',
-    imageCaption: '복잡한 서류 vs 온체인 즉시 인증',
-    detailTitle: 'RE100 인증 프리패스',
+    title: '투명한 온체인 RE100 인증',
+    tagline: '그린워싱 차단 · 즉시 발급',
+    shortDesc:
+      '전력 생산 즉시 블록체인에 영구 기록되어, 만연한 그린워싱을 차단하고 서류·시간 낭비 없이 증명서를 발급합니다.',
+    imageCaption: '온체인 RE100 · 그린워싱 차단',
+    detailTitle: '온체인 녹색 증명 (RE100 On-chain)',
     summaryBullets: [
       {
         icon: FileWarning,
@@ -239,13 +267,16 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
       {
         icon: BadgeCheck,
         segments: [
-          seg('계측 즉시 '),
-          seg('블록체인 영구 기록', true),
-          seg(' — '),
-          seg('스마트 컨트랙트', true),
-          seg('가 '),
-          seg('감사관', true),
-          seg(' 역할을 대신합니다.'),
+          seg('투명한 추적', true),
+          seg(': 블록체인은 에너지의 출처를 변경 불가능하게 기록하여 '),
+          seg('재생에너지 인증서', true),
+          seg('('),
+          seg('REC', true),
+          seg(')의 정확한 추적을 보장하고 '),
+          seg('그린워싱', true, { underline: true, tooltip: GREENWASHING_TOOLTIP }),
+          seg('을 '),
+          seg('방지', true),
+          seg('합니다.'),
         ],
       },
       {
@@ -276,11 +307,12 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     id: 3,
     icon: Database,
     accent: 'violet',
-    title: '데이터 자산화 · AI',
-    tagline: 'Oracle · 국가 AI',
-    shortDesc: '모든 계측값이 온체인 기록 → AI 학습 → 범국가적 전력망 최적화.',
-    imageCaption: '계량 → 온체인 → AI → 전력망 관리',
-    detailTitle: '전력 데이터 자산화',
+    title: '전력 데이터의 자산화',
+    tagline: '무결점 Oracle · 국가 AI',
+    shortDesc:
+      '위변조가 불가능한 초 단위 계측 데이터를 통해, 국가 전력망 관리와 AI 학습을 위한 고부가가치 자산을 생산합니다.',
+    imageCaption: '무결점 Oracle 데이터 · AI 학습',
+    detailTitle: '고품질 전력 데이터 자산화 (Data Capital)',
     summaryBullets: [
       {
         icon: Layers,
@@ -330,13 +362,14 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     id: 4,
     icon: Coins,
     accent: 'indigo',
-    title: '원화 스테이블코인 정산',
-    tagline: 'WON → CBDC',
-    shortDesc: '한국은행 원화 스테이블코인 정책과 연계 — P2P 에너지 정산으로 디지털 금융 확장에 기여.',
+    title: '원화 스테이블코인 연계',
+    tagline: 'WON → CBDC · 금융 혁신',
+    shortDesc:
+      '한국은행 원화 예금 토큰(CBDC) 정책 및 실거래 테스트와 직접 연동되는 차세대 디지털 결제 인프라입니다.',
     imageCaption: '이창용 총재 · 원화 스테이블코인 (2025.8.19 국회)',
     heroImage: '/presentation/bok-governor-slide.png',
     modalPhoto: '/presentation/bok-governor-news.png',
-    detailTitle: 'CBDC 연계 차세대 핀테크망',
+    detailTitle: '차세대 에너지 핀테크 (CBDC Network)',
     summaryBullets: [
       {
         icon: Globe,
