@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { BrowserProvider, Contract, parseUnits } from 'ethers'
+import { BrowserProvider, Contract, Interface, MaxUint256, parseUnits } from 'ethers'
 import { PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, LEDGER_ERROR_MESSAGES } from '../lib/producerLedger'
 
 // ── 상수 ──
@@ -19,6 +19,12 @@ const WON_TOKEN_ADDRESS = '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB'
 const WON_TOKEN_ABI = [
   'function transfer(address to, uint amount) returns (bool)',
   'function approve(address spender, uint256 amount) returns (bool)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+]
+
+const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167020862e6a7233E985261'
+const MULTICALL3_ABI = [
+  'function aggregate3(tuple(address target, bool allowFailure, bytes callData)[] calls) payable returns (tuple(bool success, bytes returnData)[])',
 ]
 
 // ── 에너지 공급자 설정 ──
@@ -180,7 +186,7 @@ export function useWallet() {
     return receipt.hash
   }, [state.isConnected])
 
-  /** P2P — 원장 purchaseEnergy: WON 결제 + totalSoldWh·EnergySold 온체인 기록 */
+  /** P2P — 원장 purchaseEnergy: WON → 생산자 + totalSoldWh·EnergySold (approve는 1회만, 이후 정산 1번) */
   const purchaseProducerEnergy = useCallback(async (
     whAmount: number,
     producerWallet: string,
@@ -192,6 +198,7 @@ export function useWallet() {
     const whInt = BigInt(Math.max(1, Math.round(whAmount)))
     const provider = new BrowserProvider(window.ethereum)
     const signer = await provider.getSigner()
+    const buyer = await signer.getAddress()
     const feeData = await provider.getFeeData()
     const gasOpts = {
       maxFeePerGas: feeData.maxFeePerGas ? (feeData.maxFeePerGas * 150n) / 100n : undefined,
@@ -206,12 +213,35 @@ export function useWallet() {
 
     const wonCost = (whInt * rate * 10n ** 18n) / 1000n
     const won = new Contract(WON_TOKEN_ADDRESS, WON_TOKEN_ABI, signer)
-    const approveTx = await won.approve(PRODUCER_LEDGER_ADDRESS, wonCost, gasOpts)
-    await approveTx.wait()
+    const allowance: bigint = await won.allowance(buyer, PRODUCER_LEDGER_ADDRESS)
 
     try {
-      const tx = await ledger.purchaseEnergy(producerWallet, whInt, gasOpts)
+      // 이미 허가됐으면 정산 1번만 (원장 → 생산자 WON 전송 + 판매 기록)
+      if (allowance >= wonCost) {
+        const tx = await ledger.purchaseEnergy(producerWallet, whInt, gasOpts)
+        const receipt = await tx.wait()
+        return receipt.hash
+      }
+
+      // 첫 P2P: approve + purchaseEnergy 를 Multicall로 한 번에 (MetaMask 1번)
+      const wonIface = new Interface(WON_TOKEN_ABI)
+      const ledgerIface = new Interface([...PRODUCER_LEDGER_ABI])
+      const multicall = new Contract(MULTICALL3_ADDRESS, MULTICALL3_ABI, signer)
+      const calls = [
+        {
+          target: WON_TOKEN_ADDRESS,
+          allowFailure: false,
+          callData: wonIface.encodeFunctionData('approve', [PRODUCER_LEDGER_ADDRESS, MaxUint256]),
+        },
+        {
+          target: PRODUCER_LEDGER_ADDRESS,
+          allowFailure: false,
+          callData: ledgerIface.encodeFunctionData('purchaseEnergy', [producerWallet, whInt]),
+        },
+      ]
+      const tx = await multicall.aggregate3(calls, gasOpts)
       const receipt = await tx.wait()
+      if (!receipt) throw new Error('정산 트랜잭션이 확인되지 않았습니다.')
       return receipt.hash
     } catch (err: unknown) {
       const data = (err as { data?: string })?.data
@@ -219,6 +249,10 @@ export function useWallet() {
         const selector = data.slice(0, 10).toLowerCase()
         const msg = LEDGER_ERROR_MESSAGES[selector]
         if (msg) throw new Error(msg)
+      }
+      const msg = err instanceof Error ? err.message : ''
+      if (msg.includes('user rejected') || msg.includes('User denied')) {
+        throw new Error('MetaMask에서 정산이 취소되었습니다.')
       }
       throw err
     }

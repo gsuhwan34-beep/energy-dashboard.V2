@@ -351,6 +351,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
               connectedWallet={wallet.address}
               settlementReady={!isCustomMode || Boolean(confirmedP2pWallet)}
               settlementBlockedHint="P2P 생산자 지갑을 입력하고 「설정」을 눌러 주세요."
+              p2pLedgerSettlement={isCustomMode}
               onTransfer={handleSettleTransfer}
               onSettlementDone={refetchSettlements}
             />
