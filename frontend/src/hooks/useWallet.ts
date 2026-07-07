@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { BrowserProvider, Contract, parseUnits } from 'ethers'
+import { PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI } from '../lib/producerLedger'
 
 // ── 상수 ──
 const ARBITRUM_SEPOLIA_CHAIN_ID = '0x66eee' // 421614 in hex
@@ -15,7 +16,10 @@ export const PRODUCER_METER_ADDRESS = '0x9F9013b71f59d8ecf4730B4946F988827e3EE2A
 
 // WON 토큰 정보
 const WON_TOKEN_ADDRESS = '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB'
-const WON_TOKEN_ABI = ['function transfer(address to, uint amount) returns (bool)']
+const WON_TOKEN_ABI = [
+  'function transfer(address to, uint amount) returns (bool)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+]
 
 // ── 에너지 공급자 설정 ──
 export interface EnergySupplier {
@@ -176,6 +180,52 @@ export function useWallet() {
     return receipt.hash
   }, [state.isConnected])
 
+  /** P2P — 원장 purchaseEnergy (Wh). 판매 가능량은 미터 생산 − 원장 sold */
+  const purchaseProducerEnergy = useCallback(async (
+    whAmount: number,
+    producerWallet: string,
+  ): Promise<string> => {
+    if (!window.ethereum || !state.isConnected) {
+      throw new Error('지갑이 연결되어 있지 않습니다.')
+    }
+
+    const whInt = BigInt(Math.max(1, Math.round(whAmount)))
+    const provider = new BrowserProvider(window.ethereum)
+    const signer = await provider.getSigner()
+    const feeData = await provider.getFeeData()
+    const gasOpts = {
+      maxFeePerGas: feeData.maxFeePerGas ? (feeData.maxFeePerGas * 150n) / 100n : undefined,
+      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ? (feeData.maxPriorityFeePerGas * 150n) / 100n : undefined,
+    }
+
+    const ledger = new Contract(PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, signer)
+    const rate = await ledger.ratePerKwh(producerWallet)
+    if (rate === 0n) {
+      throw new Error('생산자 단가가 온체인에 없습니다. 생산자 탭에서 MetaMask 연결 후 단가를 저장해 주세요.')
+    }
+
+    const wonCost = (whInt * rate * 10n ** 18n) / 1000n
+    const won = new Contract(WON_TOKEN_ADDRESS, WON_TOKEN_ABI, signer)
+    const approveTx = await won.approve(PRODUCER_LEDGER_ADDRESS, wonCost, gasOpts)
+    await approveTx.wait()
+
+    const tx = await ledger.purchaseEnergy(producerWallet, whInt, gasOpts)
+    const receipt = await tx.wait()
+    return receipt.hash
+  }, [state.isConnected])
+
+  const setProducerRateOnChain = useCallback(async (rate: number): Promise<string> => {
+    if (!window.ethereum || !state.isConnected) {
+      throw new Error('지갑이 연결되어 있지 않습니다.')
+    }
+    const provider = new BrowserProvider(window.ethereum)
+    const signer = await provider.getSigner()
+    const ledger = new Contract(PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, signer)
+    const tx = await ledger.setRate(Math.round(rate))
+    const receipt = await tx.wait()
+    return receipt.hash
+  }, [state.isConnected])
+
   // 계정/체인 변경 감지
   useEffect(() => {
     if (!window.ethereum) return
@@ -219,7 +269,7 @@ export function useWallet() {
     }).catch(() => {})
   }, [checkNetwork])
 
-  return { ...state, connect, disconnect, transferWon }
+  return { ...state, connect, disconnect, transferWon, purchaseProducerEnergy, setProducerRateOnChain }
 }
 
 // Window 타입 확장

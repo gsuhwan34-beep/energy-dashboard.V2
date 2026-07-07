@@ -29,7 +29,12 @@ interface Props {
   supplier: EnergySupplier
   payerWallets?: string[]
   connectedWallet?: string | null
-  onTransfer: (amountKwh: number, supplierWallet: string, rate: number) => Promise<string>
+  onTransfer: (
+    totalWh: number,
+    amountKwh: number,
+    supplierWallet: string,
+    rate: number,
+  ) => Promise<string>
   onSettlementDone: () => void
 }
 
@@ -226,7 +231,7 @@ export default function WeeklySettlement({
     setSettling(week.weekIndex)
     setError(null)
     try {
-      const txHash = await onTransfer(week.totalKWh, supplier.wallet, supplier.rate)
+      const txHash = await onTransfer(week.totalWh, week.totalKWh, supplier.wallet, supplier.rate)
       if (connectedWallet) writeStoredWallet(STORAGE_PAYER_WALLET, connectedWallet)
       setJustSettled(prev => ({ ...prev, [week.weekIndex]: txHash }))
       onSettlementDone()

@@ -12,12 +12,7 @@ export default function ProducerSalesTable({ sales, verifiedCount, rawInboundCou
   if (!sales.length) {
     return (
       <div className="border border-border-strong rounded-lg bg-bg-base-opaque px-4 py-8 text-center text-xs text-fg-muted">
-        <p>검증된 P2P 정산 내역이 없습니다.</p>
-        {rawInboundCount > 0 && (
-          <p className="mt-2 text-tag-orange-100">
-            WON 수신 {rawInboundCount}건 중 계량 데이터와 매칭된 정산이 없습니다.
-          </p>
-        )}
+        <p>온체인 판매 내역이 없습니다.</p>
       </div>
     )
   }
@@ -28,14 +23,13 @@ export default function ProducerSalesTable({ sales, verifiedCount, rawInboundCou
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque overflow-hidden">
       <div className="px-4 py-3 border-b border-border-base space-y-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-fg-base">검증된 P2P 정산 내역</h3>
+          <h3 className="text-sm font-semibold text-fg-base">온체인 P2P 판매 내역</h3>
           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-tag-cyan-10 text-tag-cyan-100">
-            온체인 교차검증
+            원장 EnergySold
           </span>
         </div>
         <p className="text-[10px] text-fg-muted">
-          소비자 계량(kWh) + WON 송금 + 주차 매칭 · {verifiedCount}건 검증됨
-          {rawInboundCount > verifiedCount && ` (미매칭 WON ${rawInboundCount - verifiedCount}건 제외)`}
+          원장 컨트랙트 EnergySold · {verifiedCount}건 · purchaseEnergy 정산
         </p>
         <OnChainExplainer variant="light" compact />
       </div>

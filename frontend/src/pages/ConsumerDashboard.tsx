@@ -128,6 +128,26 @@ export default function ConsumerDashboard({ wallet }: Props) {
     }
   }
 
+  const handleSettleTransfer = useCallback(
+    async (totalWh: number, amountKwh: number, supplierWallet: string, rate: number) => {
+      if (isCustomMode) {
+        const res = await fetch(api(`producer?wallet=${encodeURIComponent(supplierWallet)}`))
+        if (res.ok) {
+          const prod = await res.json()
+          const available = Number(prod?.overview?.availableWh ?? 0)
+          if (totalWh > available + 0.001) {
+            throw new Error(
+              `생산자 판매 가능량(${available.toLocaleString()} Wh)보다 정산량(${Math.round(totalWh).toLocaleString()} Wh)이 많습니다.`,
+            )
+          }
+        }
+        return wallet.purchaseProducerEnergy(totalWh, supplierWallet)
+      }
+      return wallet.transferWon(amountKwh, supplierWallet, rate)
+    },
+    [isCustomMode, wallet],
+  )
+
   return (
     <>
       <form onSubmit={handleSubmit} className="mb-4">
@@ -278,7 +298,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
               supplier={supplier}
               payerWallets={payerWallets}
               connectedWallet={wallet.address}
-              onTransfer={wallet.transferWon}
+              onTransfer={handleSettleTransfer}
               onSettlementDone={refetchSettlements}
             />
           </div>

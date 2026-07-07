@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useProducerData } from '../hooks/useProducerData'
 import { useNetworkStatus } from '../hooks/useEnergyData'
 import type { useWallet } from '../hooks/useWallet'
@@ -11,7 +11,6 @@ import ProducerSalesTable from '../components/ProducerSalesTable'
 import { Sun, RefreshCw, Search, AlertCircle, Save, Wallet, CheckCircle2 } from 'lucide-react'
 import { api } from '../lib/api'
 import { writeStoredWallet, STORAGE_PRODUCER_WALLET, STORAGE_SUPPLIER_RATE, DEFAULT_PRODUCER_WALLET } from '../lib/presentation'
-import { toProducerDeltaReadings, getProducerCumulativeWh } from '../lib/readingDelta'
 
 type WalletHook = ReturnType<typeof useWallet>
 
@@ -96,31 +95,25 @@ export default function ProducerDashboard({ wallet }: Props) {
       })
       if (!res.ok) throw new Error('save failed')
       writeStoredPrice(wallet.address, Number(unitRate))
+      await wallet.setProducerRateOnChain(Number(unitRate))
       priceDirtyRef.current = false
-      setSaveMessage(`${unitRate} WON/kWh 로 저장되었습니다.`)
+      setSaveMessage(`${unitRate} WON/kWh 저장 (웹 + 온체인 단가)`)
       refetch()
-    } catch {
-      setSaveMessage('단가 저장에 실패했습니다.')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '단가 저장에 실패했습니다.'
+      setSaveMessage(msg.includes('save failed') ? '단가 저장에 실패했습니다.' : msg)
     } finally {
       setIsSaving(false)
     }
-  }, [wallet.address, unitRate, canEditPrice, refetch])
+  }, [wallet, unitRate, canEditPrice, refetch])
 
   const overview = data?.overview
   const productions = data?.productions ?? []
-  const deltaProductions = useMemo(() => toProducerDeltaReadings(productions), [productions])
-  const deltaByTxKey = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const r of deltaProductions) {
-      map.set(`${r.txHash}-${r.logIndex}`, r.wh)
-    }
-    return map
-  }, [deltaProductions])
-  const cumulativeProductionWh = getProducerCumulativeWh(productions)
-  const totalProductionKWh = cumulativeProductionWh / 1000
+  const totalProductionKWh = overview?.totalProductionKWh ?? 0
+  const totalProducedWh = overview?.totalWh ?? 0
   const soldKWh = overview?.soldKWh ?? 0
-  const availableKWh = Math.max(0, Number((totalProductionKWh - soldKWh).toFixed(6)))
-  const availableWh = Number((availableKWh * 1000).toFixed(4))
+  const availableKWh = overview?.availableKWh ?? 0
+  const availableWh = overview?.availableWh ?? 0
 
   return (
     <>
@@ -137,11 +130,11 @@ export default function ProducerDashboard({ wallet }: Props) {
             <p className="text-xs font-semibold text-brand-100 mb-1">내 판매 단가 설정</p>
             <p className="text-[10px] text-fg-muted">
               연결 지갑 <span className="font-mono">{wallet.address?.slice(0, 6)}…{wallet.address?.slice(-4)}</span>
-              {' '}· 소비자 P2P 검색 시 이 단가로 정산됩니다.
+              {' '}· 저장 시 온체인 단가 등록 · P2P 정산에 사용
             </p>
             {saveMessage && (
-              <p className={`text-[10px] mt-1 flex items-center gap-1 ${saveMessage.includes('실패') ? 'text-tag-orange-100' : 'text-tag-cyan-100'}`}>
-                {saveMessage.includes('실패') ? <AlertCircle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+              <p className={`text-[10px] mt-1 flex items-center gap-1 ${saveMessage.includes('실패') || saveMessage.includes('없습니다') ? 'text-tag-orange-100' : 'text-tag-cyan-100'}`}>
+                {saveMessage.includes('실패') || saveMessage.includes('없습니다') ? <AlertCircle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
                 {saveMessage}
               </p>
             )}
@@ -220,25 +213,25 @@ export default function ProducerDashboard({ wallet }: Props) {
             <StatCard
               label="총 생산량"
               value={`${totalProductionKWh.toFixed(4)} kWh`}
-              sub={`${cumulativeProductionWh.toLocaleString()} Wh 누적 · ${overview?.totalReadings ?? 0}회 온체인`}
+              sub={`${totalProducedWh.toLocaleString()} Wh · ${overview?.totalReadings ?? 0}회 온체인`}
               accent
             />
             <StatCard
               label="판매 완료량"
               value={`${soldKWh.toFixed(4)} kWh`}
-              sub={`검증된 정산 ${overview?.verifiedSaleCount ?? 0}건 · ${overview?.totalWonReceived.toLocaleString('ko-KR', { maximumFractionDigits: 2 }) ?? 0} WON`}
+              sub={`${overview?.verifiedSaleCount ?? 0}건 · ${overview?.totalWonReceived.toLocaleString('ko-KR', { maximumFractionDigits: 2 }) ?? 0} WON`}
             />
             <StatCard
               label="판매 가능 잔여량"
               value={`${availableKWh.toFixed(4)} kWh`}
-              sub={`${availableWh.toLocaleString()} Wh · 판매 시 감소`}
+              sub={`${availableWh.toLocaleString()} Wh · 미터 생산 − 온체인 판매`}
             />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <div className="lg:col-span-2 space-y-4">
               <EnergyChart
-                readings={deltaProductions}
+                readings={productions}
                 readingsAreDelta
                 volumeLabel="5분 발전량"
                 chartTitle="발전량 차트"
@@ -246,12 +239,12 @@ export default function ProducerDashboard({ wallet }: Props) {
                   label: '판매 가능 잔여',
                   kWh: availableKWh,
                   wh: availableWh,
-                  hint: `누적 ${cumulativeProductionWh.toLocaleString()} Wh · 정산 시 감소`,
+                  hint: `총 ${totalProducedWh.toLocaleString()} Wh · 판매 ${overview?.soldWh?.toLocaleString() ?? 0} Wh`,
                 }}
               />
               <DashboardHeatmap
                 title="생산 전력 히트맵"
-                readings={deltaProductions}
+                readings={productions}
                 anchorDate={weekAnchor}
                 onAnchorDateChange={setWeekAnchor}
               />
@@ -275,9 +268,8 @@ export default function ProducerDashboard({ wallet }: Props) {
           <TransactionTable
             readings={productions}
             title="온체인 발전 기록"
-            whColumnLabel="온체인 누적 (Wh)"
-            deltaByKey={deltaByTxKey}
-            deltaColumnLabel="5분 발전량 (Wh)"
+            whColumnLabel="5분 발전량 (Wh)"
+            showDeltaLabel
           />
         </>
       )}

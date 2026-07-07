@@ -21,9 +21,15 @@ const METER_ADDRESS = '0xb551a87e38E7A838d9E8C3ef2CDbD40725Ad6a7B';
 const METER_ABI = ["event EnergyDataRecorded(address indexed device, uint256 powerValue, uint256 timestamp)"];
 const meterContract = new ethers.Contract(METER_ADDRESS, METER_ABI, provider);
 
-const PRODUCER_METER_ADDRESS = '0x9F9013b71f59d8ecf4730B4946F988827e3EE2A8';
-const PRODUCER_METER_ABI = ["event EnergyProduced(address indexed producer, uint256 powerValue, uint256 timestamp)"];
+const {
+  PRODUCER_METER_ADDRESS,
+  PRODUCER_METER_ABI,
+  PRODUCER_LEDGER_ADDRESS,
+  PRODUCER_LEDGER_ABI,
+} = require('./lib/producerLedger');
+
 const producerMeterContract = new ethers.Contract(PRODUCER_METER_ADDRESS, PRODUCER_METER_ABI, provider);
+const producerLedgerContract = new ethers.Contract(PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, provider);
 
 const WON_ADDRESS = '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB';
 const WON_ABI = ["event Transfer(address indexed from, address indexed to, uint256 value)"];
@@ -87,9 +93,114 @@ async function fetchConsumerReadings(consumerWallet) {
   return readings;
 }
 
+async function fetchProducerProductions(producer) {
+  const filter = producerMeterContract.filters.EnergyProduced(producer);
+  const logs = await producerMeterContract.queryFilter(filter, START_BLOCK, 'latest');
+
+  const productions = logs.map((log) => {
+    const timestamp = Number(log.args[2]);
+    const deltaWh = normalizePowerValue(log.args[1], timestamp);
+    return {
+      txHash: log.transactionHash,
+      blockNumber: log.blockNumber,
+      logIndex: log.index,
+      wh: Number(deltaWh.toFixed(4)),
+      kWh: Number((deltaWh / 1000).toFixed(6)),
+      timestamp,
+      date: new Date(timestamp * 1000).toISOString(),
+    };
+  });
+
+  productions.sort((a, b) => {
+    if (a.blockNumber !== b.blockNumber) return a.blockNumber - b.blockNumber;
+    return a.logIndex - b.logIndex;
+  });
+
+  const meterTotalWh = Number(productions.reduce((sum, p) => sum + p.wh, 0).toFixed(4));
+  return { productions, meterTotalWh };
+}
+
+async function fetchLedgerSales(producer) {
+  const soldFilter = producerLedgerContract.filters.EnergySold(producer);
+  const soldLogs = await producerLedgerContract.queryFilter(soldFilter, START_BLOCK, 'latest');
+
+  const sales = soldLogs.map((log) => {
+    const soldWh = Number(log.args.soldWh ?? log.args[2]);
+    const wonPaid = Number(ethers.formatUnits(log.args.wonPaid ?? log.args[4] ?? log.args[5], 18));
+    const timestamp = Number(log.args.timestamp ?? log.args[5] ?? log.args[6]);
+    const buyer = ethers.getAddress(log.args.buyer ?? log.args[1]);
+    const ratePerKwh = soldWh > 0 ? Number(((wonPaid / soldWh) * 1000).toFixed(2)) : 0;
+    return {
+      txHash: log.transactionHash,
+      blockNumber: log.blockNumber,
+      timestamp,
+      from: buyer,
+      to: producer,
+      wonAmount: wonPaid,
+      kWh: Number((soldWh / 1000).toFixed(6)),
+      wh: soldWh,
+      weekIndex: -1,
+      weekLabel: '온체인 P2P 구매',
+      ratePerKwh,
+      meterReadingCount: 0,
+      verified: true,
+    };
+  });
+
+  sales.sort((a, b) => a.timestamp - b.timestamp);
+  return sales;
+}
+
+async function buildProducerPayload(producer) {
+  const { productions, meterTotalWh } = await fetchProducerProductions(producer);
+  const ledgerStats = await producerLedgerContract.getStats(producer);
+  const soldWh = Number(ledgerStats.totalSoldWh);
+  const onChainRate = Number(ledgerStats.rate);
+  const availableWh = Math.max(0, Number((meterTotalWh - soldWh).toFixed(4)));
+  const sales = await fetchLedgerSales(producer);
+  const totalWonReceived = Number(sales.reduce((sum, s) => sum + s.wonAmount, 0).toFixed(6));
+
+  const ratePerKwh = onChainRate > 0
+    ? onChainRate
+    : supplierPrices[producer.toLowerCase()] !== undefined
+      ? supplierPrices[producer.toLowerCase()]
+      : 150;
+
+  const currentBlock = await provider.getBlockNumber();
+
+  return {
+    wallet: producer,
+    meterContract: PRODUCER_METER_ADDRESS,
+    ledgerContract: PRODUCER_LEDGER_ADDRESS,
+    contract: PRODUCER_METER_ADDRESS,
+    wonToken: WON_ADDRESS,
+    network: 'Arbitrum Sepolia',
+    chainId: 421614,
+    latestBlock: currentBlock,
+    ratePerKwh,
+    onChainRate,
+    overview: {
+      totalReadings: productions.length,
+      totalWh: meterTotalWh,
+      totalProductionKWh: meterTotalWh / 1000,
+      totalWonReceived,
+      soldKWh: soldWh / 1000,
+      soldWh,
+      availableKWh: availableWh / 1000,
+      availableWh,
+      verifiedSaleCount: sales.length,
+      rawInboundCount: sales.length,
+      firstProduction: productions.length > 0 ? productions[0] : null,
+      lastProduction: productions.length > 0 ? productions[productions.length - 1] : null,
+    },
+    productions,
+    sales,
+  };
+}
+
 const fs = require('fs');
 const path = require('path');
-const { matchVerifiedProducerSales, findMeterVerifiedTransfers } = require('./lib/settlementMatch');
+const { findMeterVerifiedTransfers } = require('./lib/settlementMatch');
 
 const SUPPLIER_PRICES_FILE = path.join(__dirname, 'supplier-prices.json');
 let supplierPrices = {};
@@ -319,102 +430,8 @@ app.get('/api/producer', async (req, res) => {
     if (!isValidAddress(wallet)) {
       return res.status(400).json({ error: 'Valid producer wallet required (?wallet=0x...)' });
     }
-
     const producer = ethers.getAddress(wallet);
-    const filter = producerMeterContract.filters.EnergyProduced(producer);
-    const logs = await producerMeterContract.queryFilter(filter, START_BLOCK, 'latest');
-
-    let totalWh = 0;
-    const productions = logs.map((log) => {
-      const timestamp = Number(log.args[2]);
-      const powerValue = normalizePowerValue(log.args[1], timestamp);
-      return {
-        txHash: log.transactionHash,
-        blockNumber: log.blockNumber,
-        logIndex: log.index,
-        wh: Number(powerValue.toFixed(4)),
-        kWh: Number((powerValue / 1000).toFixed(6)),
-        timestamp,
-        date: new Date(timestamp * 1000).toISOString(),
-      };
-    });
-
-    productions.sort((a, b) => {
-      if (a.blockNumber !== b.blockNumber) return a.blockNumber - b.blockNumber;
-      return a.logIndex - b.logIndex;
-    });
-
-    // 생산자 미터는 누적 적산 — 총량은 마지막 값
-    totalWh = productions.length > 0 ? productions[productions.length - 1].wh : 0;
-    totalWh = Number(totalWh.toFixed(4));
-    const totalProductionKWh = totalWh / 1000;
-
-    const inboundFilter = wonContract.filters.Transfer(null, producer);
-    const inboundLogs = await wonContract.queryFilter(inboundFilter, START_BLOCK, 'latest');
-    const allInbound = [];
-
-    for (const log of inboundLogs) {
-      if (log.args[0] === ethers.ZeroAddress) continue;
-      allInbound.push({
-        txHash: log.transactionHash,
-        blockNumber: log.blockNumber,
-        timestamp: await getBlockTimestamp(log.blockNumber),
-        from: ethers.getAddress(log.args[0]),
-        to: producer,
-        wonAmount: Number(ethers.formatUnits(log.args[2], 18)),
-      });
-    }
-
-    const ratePerKwh = supplierPrices[producer.toLowerCase()] !== undefined
-      ? supplierPrices[producer.toLowerCase()]
-      : 150;
-
-    const uniqueConsumers = [...new Set(allInbound.map((t) => t.from.toLowerCase()))];
-    const consumerReadingsMap = {};
-    await Promise.all(
-      uniqueConsumers.map(async (consumerLower) => {
-        try {
-          const readings = await fetchConsumerReadings(consumerLower);
-          consumerReadingsMap[consumerLower] = readings;
-        } catch {
-          consumerReadingsMap[consumerLower] = [];
-        }
-      }),
-    );
-
-    const sales = matchVerifiedProducerSales(producer, allInbound, consumerReadingsMap, ratePerKwh);
-
-    const totalWonReceived = Number(sales.reduce((sum, s) => sum + s.wonAmount, 0).toFixed(6));
-    const soldKWh = Number(sales.reduce((sum, s) => sum + s.kWh, 0).toFixed(6));
-    const availableKWh = Math.max(0, Number((totalProductionKWh - soldKWh).toFixed(6)));
-
-    const currentBlock = await provider.getBlockNumber();
-
-    res.json({
-      wallet: producer,
-      contract: PRODUCER_METER_ADDRESS,
-      wonToken: WON_ADDRESS,
-      network: 'Arbitrum Sepolia',
-      chainId: 421614,
-      latestBlock: currentBlock,
-      ratePerKwh,
-      overview: {
-        totalReadings: productions.length,
-        totalWh,
-        totalProductionKWh,
-        totalWonReceived,
-        soldKWh,
-        soldWh: Number((soldKWh * 1000).toFixed(4)),
-        availableKWh,
-        availableWh: Number((availableKWh * 1000).toFixed(4)),
-        verifiedSaleCount: sales.length,
-        rawInboundCount: allInbound.length,
-        firstProduction: productions.length > 0 ? productions[0] : null,
-        lastProduction: productions.length > 0 ? productions[productions.length - 1] : null,
-      },
-      productions,
-      sales,
-    });
+    res.json(await buildProducerPayload(producer));
   } catch (error) {
     console.error('Producer fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch producer data' });
@@ -433,7 +450,8 @@ app.get('/api/energy/network', async (req, res) => {
       latestBlock: blockNum,
       rpcUrl: RPC_URL,
       contract: METER_ADDRESS,
-      producerContract: PRODUCER_METER_ADDRESS,
+      producerMeterContract: PRODUCER_METER_ADDRESS,
+      producerLedgerContract: PRODUCER_LEDGER_ADDRESS,
       status: 'connected'
     });
   } catch (error) {

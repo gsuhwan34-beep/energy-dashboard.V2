@@ -3,9 +3,9 @@ import type { ShowcaseTab, SummarySegment } from './showcaseContent'
 import { ACCENT_STYLES } from './showcaseContent'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 
-function SegmentSpan({ segment, accentText }: { segment: SummarySegment; accentText: string }) {
+function SegmentSpan({ segment, accentText, accentBoldText }: { segment: SummarySegment; accentText: string; accentBoldText: string }) {
   const className = [
-    segment.bold ? `font-bold ${accentText}` : '',
+    segment.bold ? `font-bold ${accentBoldText}` : '',
     segment.underline ? 'underline decoration-dotted underline-offset-[3px] cursor-help' : '',
   ]
     .filter(Boolean)
@@ -38,11 +38,11 @@ function SegmentSpan({ segment, accentText }: { segment: SummarySegment; accentT
   return inner
 }
 
-function BulletText({ segments, accentText }: { segments: SummarySegment[]; accentText: string }) {
+function BulletText({ segments, accentText, accentBoldText }: { segments: SummarySegment[]; accentText: string; accentBoldText: string }) {
   return (
     <p className="text-[15px] text-slate-600 leading-relaxed">
       {segments.map((s, i) => (
-        <SegmentSpan key={i} segment={s} accentText={accentText} />
+        <SegmentSpan key={i} segment={s} accentText={accentText} accentBoldText={accentBoldText} />
       ))}
     </p>
   )
@@ -79,7 +79,7 @@ export function ShowcaseSummaryPanel({ tab, onOpenReport }: SummaryProps) {
                 <Icon size={24} strokeWidth={2} />
               </div>
               <div className="pt-1.5 min-w-0">
-                <BulletText segments={bullet.segments} accentText={accent.text} />
+                <BulletText segments={bullet.segments} accentText={accent.text} accentBoldText={accent.boldText} />
               </div>
             </li>
           )
