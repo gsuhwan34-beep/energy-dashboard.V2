@@ -127,8 +127,8 @@ async function fetchLedgerSales(producer) {
 
     const sales = soldLogs.map((log) => {
       const soldWh = Number(log.args.soldWh ?? log.args[2]);
-      const wonPaid = Number(ethers.formatUnits(log.args.wonPaid ?? log.args[5] ?? log.args[4], 18));
-      const timestamp = Number(log.args.timestamp ?? log.args[6] ?? log.args[5]);
+      const wonPaid = Number(ethers.formatUnits(log.args.wonPaid ?? log.args[4] ?? log.args[5], 18));
+      const timestamp = Number(log.args.timestamp ?? log.args[5] ?? log.args[6]);
       const buyer = ethers.getAddress(log.args.buyer ?? log.args[1]);
       const ratePerKwh = soldWh > 0 ? Number(((wonPaid / soldWh) * 1000).toFixed(2)) : 0;
       return {

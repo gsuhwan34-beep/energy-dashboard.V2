@@ -225,7 +225,7 @@ export default function ProducerDashboard({ wallet }: Props) {
             <StatCard
               label="판매 가능 잔여량"
               value={`${availableKWh.toFixed(4)} kWh`}
-              sub={`${availableWh.toLocaleString()} Wh · IoT 생산 − WON 판매`}
+              sub={`${availableWh.toLocaleString()} Wh · IoT 생산 − 원장 판매량`}
             />
           </div>
 

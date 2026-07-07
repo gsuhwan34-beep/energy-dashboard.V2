@@ -167,9 +167,23 @@ export default function ConsumerDashboard({ wallet }: Props) {
   }
 
   const handleSettleTransfer = useCallback(
-    async (_totalWh: number, amountKwh: number, supplierWallet: string, rate: number) => {
-      if (isCustomMode && !confirmedP2pWallet) {
-        throw new Error('P2P 생산자 지갑을 입력하고 「설정」을 눌러 주세요.')
+    async (totalWh: number, amountKwh: number, supplierWallet: string, rate: number) => {
+      if (isCustomMode) {
+        if (!confirmedP2pWallet) {
+          throw new Error('P2P 생산자 지갑을 입력하고 「설정」을 눌러 주세요.')
+        }
+        const res = await fetch(api(`producer?wallet=${encodeURIComponent(supplierWallet)}`))
+        if (res.ok) {
+          const prod = await res.json()
+          const available = Number(prod?.overview?.availableWh ?? 0)
+          if (totalWh > available + 0.001) {
+            throw new Error(
+              `판매 가능량(${available.toLocaleString()} Wh)보다 정산량(${Math.round(totalWh).toLocaleString()} Wh)이 많습니다.`,
+            )
+          }
+        }
+        // WON approve + 원장 purchaseEnergy → totalSoldWh·EnergySold 온체인 기록
+        return wallet.purchaseProducerEnergy(totalWh, supplierWallet)
       }
       return wallet.transferWon(amountKwh, supplierWallet, rate)
     },

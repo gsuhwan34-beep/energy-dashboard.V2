@@ -4,7 +4,7 @@ const PRODUCER_METER_ABI = ['event EnergyProduced(address indexed producer, uint
 
 const PRODUCER_LEDGER_ADDRESS = '0x0FF53BB6f54A08aBf410f64b6103100d5bF9404d';
 const PRODUCER_LEDGER_ABI = [
-  'event EnergySold(address indexed producer, address indexed buyer, uint256 soldWh, uint256 cumulativeSoldWh, uint256 availableWh, uint256 wonPaid, uint256 timestamp)',
+  'event EnergySold(address indexed producer, address indexed buyer, uint256 soldWh, uint256 cumulativeSoldWh, uint256 wonPaid, uint256 timestamp)',
   'function getStats(address producer) view returns (uint256 totalProducedWh, uint256 totalSoldWh, uint256 availableWh, uint256 lastUpdate, uint256 rate)',
   'function ratePerKwh(address producer) view returns (uint256)',
 ];
