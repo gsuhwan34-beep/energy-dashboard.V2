@@ -31,7 +31,6 @@ interface Props {
   connectedWallet?: string | null
   settlementReady?: boolean
   settlementBlockedHint?: string
-  p2pLedgerSettlement?: boolean
   onTransfer: (
     totalWh: number,
     amountKwh: number,
@@ -177,7 +176,7 @@ function matchSettlementsToWeeks(
 
 export default function WeeklySettlement({
   readings, settlements, isWalletConnected, supplier, payerWallets = [], connectedWallet,
-  settlementReady = true, settlementBlockedHint, p2pLedgerSettlement = false,
+  settlementReady = true, settlementBlockedHint,
   onTransfer, onSettlementDone,
 }: Props) {
   const [justSettled, setJustSettled] = useState<Record<number, string>>({})
@@ -294,16 +293,6 @@ export default function WeeklySettlement({
         <div className="mx-4 mt-3 p-2.5 rounded-lg border border-tag-blue-100/30 bg-tag-blue-10 flex items-center gap-2 text-xs text-tag-blue-100">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           정산을 위해 먼저 MetaMask 지갑을 연결해 주세요.
-        </div>
-      )}
-
-      {p2pLedgerSettlement && isWalletConnected && settlementReady && (
-        <div className="mx-4 mt-3 p-2.5 rounded-lg border border-tag-blue-100/30 bg-tag-blue-10 text-xs text-tag-blue-100">
-          <p className="font-semibold mb-1">P2P 정산 (원장 purchaseEnergy)</p>
-          <p>
-            MetaMask 1번 승인으로 WON이 <span className="font-mono">생산자 지갑</span>으로 전송되고, 판매량이 온체인에 기록됩니다.
-            첫 정산만 「WON 사용 허가 + 정산」이 묶여 보일 수 있습니다. <strong>approve만 하면 정산 안 됩니다</strong> — 반드시 끝까지 확인하세요.
-          </p>
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { BrowserProvider, Contract, Interface, MaxUint256, parseUnits } from 'ethers'
+import { BrowserProvider, Contract, MaxUint256, parseUnits } from 'ethers'
 import { PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, LEDGER_ERROR_MESSAGES } from '../lib/producerLedger'
 
 // ── 상수 ──
@@ -20,11 +20,6 @@ const WON_TOKEN_ABI = [
   'function transfer(address to, uint amount) returns (bool)',
   'function approve(address spender, uint256 amount) returns (bool)',
   'function allowance(address owner, address spender) view returns (uint256)',
-]
-
-const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167020862e6a7233E985261'
-const MULTICALL3_ABI = [
-  'function aggregate3(tuple(address target, bool allowFailure, bytes callData)[] calls) payable returns (tuple(bool success, bytes returnData)[])',
 ]
 
 // ── 에너지 공급자 설정 ──
@@ -216,30 +211,11 @@ export function useWallet() {
     const allowance: bigint = await won.allowance(buyer, PRODUCER_LEDGER_ADDRESS)
 
     try {
-      // 이미 허가됐으면 정산 1번만 (원장 → 생산자 WON 전송 + 판매 기록)
-      if (allowance >= wonCost) {
-        const tx = await ledger.purchaseEnergy(producerWallet, whInt, gasOpts)
-        const receipt = await tx.wait()
-        return receipt.hash
+      if (allowance < wonCost) {
+        const approveTx = await won.approve(PRODUCER_LEDGER_ADDRESS, MaxUint256, gasOpts)
+        await approveTx.wait()
       }
-
-      // 첫 P2P: approve + purchaseEnergy 를 Multicall로 한 번에 (MetaMask 1번)
-      const wonIface = new Interface(WON_TOKEN_ABI)
-      const ledgerIface = new Interface([...PRODUCER_LEDGER_ABI])
-      const multicall = new Contract(MULTICALL3_ADDRESS, MULTICALL3_ABI, signer)
-      const calls = [
-        {
-          target: WON_TOKEN_ADDRESS,
-          allowFailure: false,
-          callData: wonIface.encodeFunctionData('approve', [PRODUCER_LEDGER_ADDRESS, MaxUint256]),
-        },
-        {
-          target: PRODUCER_LEDGER_ADDRESS,
-          allowFailure: false,
-          callData: ledgerIface.encodeFunctionData('purchaseEnergy', [producerWallet, whInt]),
-        },
-      ]
-      const tx = await multicall.aggregate3(calls, gasOpts)
+      const tx = await ledger.purchaseEnergy(producerWallet, whInt, gasOpts)
       const receipt = await tx.wait()
       if (!receipt) throw new Error('정산 트랜잭션이 확인되지 않았습니다.')
       return receipt.hash
