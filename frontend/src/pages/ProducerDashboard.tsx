@@ -37,7 +37,6 @@ export default function ProducerDashboard({ wallet }: Props) {
   const [weekAnchor, setWeekAnchor] = useState(() => new Date())
   const [unitRate, setUnitRate] = useState<number | ''>(150)
   const [isSaving, setIsSaving] = useState(false)
-  const [isSyncing, setIsSyncing] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const priceDirtyRef = useRef(false)
 
@@ -110,33 +109,6 @@ export default function ProducerDashboard({ wallet }: Props) {
 
   const overview = data?.overview
 
-  const canSyncLedger = Boolean(
-    wallet.isConnected
-    && wallet.address
-    && activeWallet
-    && wallet.address.toLowerCase() === activeWallet.toLowerCase()
-    && overview?.ledgerSyncNeeded,
-  )
-
-  const handleSyncLedger = useCallback(async () => {
-    if (!wallet.address || !overview) return
-    setIsSyncing(true)
-    setSaveMessage(null)
-    try {
-      const txHash = await wallet.syncProducerLedgerFromMeter(
-        activeWallet,
-        overview.totalWh,
-        overview.ledgerProducedWh ?? 0,
-      )
-      setSaveMessage(txHash ? '원장 재고 동기화 완료 (온체인)' : '이미 동기화되어 있습니다.')
-      refetch()
-    } catch (err: unknown) {
-      setSaveMessage(err instanceof Error ? err.message : '재고 동기화에 실패했습니다.')
-    } finally {
-      setIsSyncing(false)
-    }
-  }, [wallet, activeWallet, overview, refetch])
-
   const productions = data?.productions ?? []
   const totalProductionKWh = overview?.totalProductionKWh ?? 0
   const totalProducedWh = overview?.totalWh ?? 0
@@ -150,28 +122,6 @@ export default function ProducerDashboard({ wallet }: Props) {
         <div className="mb-4 p-3 rounded-lg border border-tag-blue-100/30 bg-tag-blue-10 flex items-center gap-2 text-xs text-tag-blue-100">
           <Wallet className="w-4 h-4 shrink-0" />
           생산자 대시보드를 이용하려면 MetaMask를 연결하거나 생산자 지갑 주소를 조회하세요.
-        </div>
-      )}
-
-      {overview?.ledgerSyncNeeded && (
-        <div className="mb-4 p-3 rounded-lg border border-tag-orange-100/40 bg-tag-orange-10 flex flex-col sm:flex-row sm:items-center gap-2 text-xs text-tag-orange-100">
-          <div className="flex items-start gap-2 flex-1">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <p>
-              P2P 정산 전 원장 재고 동기화가 필요합니다.
-              {' '}미터 생산 {overview.totalWh.toLocaleString()} Wh · 원장 기록 {overview.ledgerProducedWh?.toLocaleString() ?? 0} Wh
-            </p>
-          </div>
-          {canSyncLedger && (
-            <button
-              type="button"
-              onClick={handleSyncLedger}
-              disabled={isSyncing}
-              className="shrink-0 px-3 py-2 text-xs font-bold text-white bg-tag-orange-100 rounded-md hover:opacity-90 disabled:opacity-50"
-            >
-              {isSyncing ? '동기화 중...' : '재고 동기화'}
-            </button>
-          )}
         </div>
       )}
 
@@ -264,7 +214,7 @@ export default function ProducerDashboard({ wallet }: Props) {
             <StatCard
               label="총 생산량"
               value={`${totalProductionKWh.toFixed(4)} kWh`}
-              sub={`${totalProducedWh.toLocaleString()} Wh · ${overview?.totalReadings ?? 0}회 온체인`}
+              sub={`${totalProducedWh.toLocaleString()} Wh · IoT 미터 온체인 ${overview?.totalReadings ?? 0}회`}
               accent
             />
             <StatCard
@@ -275,7 +225,7 @@ export default function ProducerDashboard({ wallet }: Props) {
             <StatCard
               label="판매 가능 잔여량"
               value={`${availableKWh.toFixed(4)} kWh`}
-              sub={`${availableWh.toLocaleString()} Wh · 미터 생산 − 온체인 판매`}
+              sub={`${availableWh.toLocaleString()} Wh · IoT 생산 − WON 판매`}
             />
           </div>
 

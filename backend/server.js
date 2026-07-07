@@ -194,12 +194,10 @@ async function fetchWonInboundSales(producer, ratePerKwh) {
 async function buildProducerPayload(producer) {
   const { productions, meterTotalWh } = await fetchProducerProductions(producer);
 
-  let ledgerProducedWh = 0;
   let ledgerSoldWh = 0;
   let onChainRate = 0;
   try {
     const ledgerStats = await producerLedgerContract.getStats(producer);
-    ledgerProducedWh = Number(ledgerStats.totalProducedWh);
     ledgerSoldWh = Number(ledgerStats.totalSoldWh);
     onChainRate = Number(ledgerStats.rate);
   } catch (err) {
@@ -220,9 +218,7 @@ async function buildProducerPayload(producer) {
 
   const soldWhFromWon = wonSales.reduce((sum, s) => sum + s.wh, 0);
   const soldWh = Math.max(ledgerSoldWh, soldWhFromWon);
-  const onChainAvailableWh = Math.max(0, ledgerProducedWh - ledgerSoldWh);
   const availableWh = Math.max(0, Number((meterTotalWh - soldWh).toFixed(4)));
-  const ledgerSyncNeeded = ledgerProducedWh + 0.0001 < meterTotalWh;
   const totalWonReceived = Number(sales.reduce((sum, s) => sum + s.wonAmount, 0).toFixed(6));
 
   const currentBlock = await provider.getBlockNumber();
@@ -247,9 +243,6 @@ async function buildProducerPayload(producer) {
       soldWh,
       availableKWh: availableWh / 1000,
       availableWh,
-      ledgerProducedWh,
-      onChainAvailableWh,
-      ledgerSyncNeeded,
       verifiedSaleCount: sales.length,
       rawInboundCount: sales.length,
       firstProduction: productions.length > 0 ? productions[0] : null,
