@@ -29,6 +29,8 @@ interface Props {
   supplier: EnergySupplier
   payerWallets?: string[]
   connectedWallet?: string | null
+  settlementReady?: boolean
+  settlementBlockedHint?: string
   onTransfer: (
     totalWh: number,
     amountKwh: number,
@@ -173,7 +175,9 @@ function matchSettlementsToWeeks(
 }
 
 export default function WeeklySettlement({
-  readings, settlements, isWalletConnected, supplier, payerWallets = [], connectedWallet, onTransfer, onSettlementDone,
+  readings, settlements, isWalletConnected, supplier, payerWallets = [], connectedWallet,
+  settlementReady = true, settlementBlockedHint,
+  onTransfer, onSettlementDone,
 }: Props) {
   const [justSettled, setJustSettled] = useState<Record<number, string>>({})
   const [settling, setSettling] = useState<number | null>(null)
@@ -227,7 +231,7 @@ export default function WeeklySettlement({
   )
 
   async function handleSettle(week: WeekRow) {
-    if (!isWalletConnected || settling !== null) return
+    if (!isWalletConnected || settling !== null || !settlementReady) return
     setSettling(week.weekIndex)
     setError(null)
     try {
@@ -292,6 +296,13 @@ export default function WeeklySettlement({
         </div>
       )}
 
+      {isWalletConnected && !settlementReady && settlementBlockedHint && (
+        <div className="mx-4 mt-3 p-2.5 rounded-lg border border-tag-orange-100/30 bg-tag-orange-10 flex items-center gap-2 text-xs text-tag-orange-100">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          {settlementBlockedHint}
+        </div>
+      )}
+
       {/* 주차별 목록 */}
       <div className="divide-y divide-border-base">
         {weeks.map((week) => {
@@ -334,9 +345,9 @@ export default function WeeklySettlement({
                   </div>
                 ) : (
                   <button onClick={() => handleSettle(week)}
-                    disabled={!isWalletConnected || isSettling}
+                    disabled={!isWalletConnected || !settlementReady || isSettling}
                     className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg transition-all ${
-                      !isWalletConnected ? 'bg-bg-subtle text-fg-disabled cursor-not-allowed'
+                      !isWalletConnected || !settlementReady ? 'bg-bg-subtle text-fg-disabled cursor-not-allowed'
                       : isSettling ? 'bg-brand-30 text-white cursor-wait'
                       : 'bg-brand-100 text-white hover:opacity-90'
                     }`}>

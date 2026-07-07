@@ -10,7 +10,7 @@ import EnergyChart from '../components/EnergyChart'
 import DashboardHeatmap from '../components/DashboardHeatmap'
 import TransactionTable from '../components/TransactionTable'
 import WeeklySettlement from '../components/WeeklySettlement'
-import { Zap, Search, AlertCircle } from 'lucide-react'
+import { Zap, Search, AlertCircle, CheckCircle2, Settings } from 'lucide-react'
 import { api } from '../lib/api'
 import { writeStoredWallet, STORAGE_CONSUMER_WALLET, STORAGE_SUPPLIER_RATE, STORAGE_PAYER_WALLET, resolvePayerWallets } from '../lib/presentation'
 import { toDeltaReadings, getCumulativeWh, getLatestDeltaReading } from '../lib/readingDelta'
@@ -35,8 +35,11 @@ export default function ConsumerDashboard({ wallet }: Props) {
   const [supplierId, setSupplierId] = useState<'renewable' | 'mixed'>('renewable')
   const [isCustomMode, setIsCustomMode] = useState(false)
   const [customSupplierWallet, setCustomSupplierWallet] = useState('')
-  const [customSupplierRate, setCustomSupplierRate] = useState<number | ''>(150)
+  const [confirmedP2pWallet, setConfirmedP2pWallet] = useState<string | null>(null)
+  const [confirmedP2pRate, setConfirmedP2pRate] = useState<number | null>(null)
+  const [p2pConfigMessage, setP2pConfigMessage] = useState<string | null>(null)
   const [isFetchingPrice, setIsFetchingPrice] = useState(false)
+  const [isConfiguringP2p, setIsConfiguringP2p] = useState(false)
   const lastFetchedWalletRef = useRef<string | null>(null)
 
   const supplier: EnergySupplier = isCustomMode
@@ -44,9 +47,11 @@ export default function ConsumerDashboard({ wallet }: Props) {
         id: 'custom',
         label: '신규 무허가 공급자 (P2P)',
         emoji: '🤝',
-        rate: Number(customSupplierRate) || 0,
-        wallet: customSupplierWallet || '0x0000000000000000000000000000000000000000',
-        description: '생산자 탭에서 설정한 단가로 정산됩니다',
+        rate: confirmedP2pRate ?? 0,
+        wallet: confirmedP2pWallet ?? '0x0000000000000000000000000000000000000000',
+        description: confirmedP2pWallet
+          ? `${confirmedP2pWallet.slice(0, 6)}…${confirmedP2pWallet.slice(-4)} · 정산 대상 설정됨`
+          : '생산자 지갑 입력 후 「설정」을 눌러 주세요',
       }
     : SUPPLIERS[supplierId]
 
@@ -71,13 +76,15 @@ export default function ConsumerDashboard({ wallet }: Props) {
   // settlements는 useConsumerSettlements(계량 지갑) API 결과 — payerWallets는 조회용
   const { data: settlementData, refetch: refetchSettlements } = useConsumerSettlements(
     /^0x[a-fA-F0-9]{40}$/.test(activeWallet) ? [activeWallet] : payerWallets,
-    isCustomMode && /^0x[a-fA-F0-9]{40}$/.test(customSupplierWallet) ? customSupplierWallet : undefined,
+    isCustomMode && confirmedP2pWallet ? confirmedP2pWallet : undefined,
   )
 
   const fetchSupplierPrice = useCallback(async (walletAddress: string) => {
     const normalized = walletAddress.toLowerCase()
-    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) return
-    if (lastFetchedWalletRef.current === normalized) return
+    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) return null
+    if (lastFetchedWalletRef.current === normalized) {
+      return confirmedP2pRate
+    }
 
     setIsFetchingPrice(true)
     try {
@@ -85,33 +92,63 @@ export default function ConsumerDashboard({ wallet }: Props) {
       if (!res.ok) throw new Error('price fetch failed')
       const resData = await res.json()
       lastFetchedWalletRef.current = normalized
-      setCustomSupplierRate(Number(resData.price))
+      return Number(resData.price)
     } catch (err) {
       console.error('단가 조회 실패:', err)
+      return null
     } finally {
       setIsFetchingPrice(false)
     }
-  }, [])
+  }, [confirmedP2pRate])
 
-  useEffect(() => {
-    if (!isCustomMode) return
+  const handleP2pConfigure = useCallback(async () => {
     const trimmed = customSupplierWallet.trim()
     if (!/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
-      lastFetchedWalletRef.current = null
+      setP2pConfigMessage('유효한 생산자 지갑 주소(0x...)를 입력하세요.')
+      setConfirmedP2pWallet(null)
+      setConfirmedP2pRate(null)
       return
     }
-    if (lastFetchedWalletRef.current !== trimmed.toLowerCase()) {
-      fetchSupplierPrice(trimmed)
+
+    setIsConfiguringP2p(true)
+    setP2pConfigMessage(null)
+    try {
+      lastFetchedWalletRef.current = null
+      const price = await fetchSupplierPrice(trimmed)
+      if (price == null || price <= 0) {
+        throw new Error('생산자 단가를 찾을 수 없습니다. 생산자 탭에서 단가를 먼저 저장해 주세요.')
+      }
+      setConfirmedP2pWallet(trimmed)
+      setConfirmedP2pRate(price)
+      setP2pConfigMessage(`${trimmed.slice(0, 6)}…${trimmed.slice(-4)} · ${price} WON/kWh · 정산 대상 설정됨`)
+    } catch (err: unknown) {
+      setConfirmedP2pWallet(null)
+      setConfirmedP2pRate(null)
+      setP2pConfigMessage(err instanceof Error ? err.message : '설정에 실패했습니다.')
+    } finally {
+      setIsConfiguringP2p(false)
     }
-  }, [customSupplierWallet, isCustomMode, fetchSupplierPrice])
+  }, [customSupplierWallet, fetchSupplierPrice])
 
   const handleSupplierWalletChange = (value: string) => {
     const next = value.trim()
-    if (next.toLowerCase() !== (lastFetchedWalletRef.current ?? '')) {
+    if (confirmedP2pWallet && next.toLowerCase() !== confirmedP2pWallet.toLowerCase()) {
+      setConfirmedP2pWallet(null)
+      setConfirmedP2pRate(null)
+      setP2pConfigMessage(null)
       lastFetchedWalletRef.current = null
     }
     setCustomSupplierWallet(value)
   }
+
+  useEffect(() => {
+    if (!isCustomMode) {
+      setConfirmedP2pWallet(null)
+      setConfirmedP2pRate(null)
+      setP2pConfigMessage(null)
+      lastFetchedWalletRef.current = null
+    }
+  }, [isCustomMode])
 
   const overview = data?.overview ?? null
   const readings = data?.readings ?? []
@@ -131,9 +168,12 @@ export default function ConsumerDashboard({ wallet }: Props) {
 
   const handleSettleTransfer = useCallback(
     async (_totalWh: number, amountKwh: number, supplierWallet: string, rate: number) => {
+      if (isCustomMode && !confirmedP2pWallet) {
+        throw new Error('P2P 생산자 지갑을 입력하고 「설정」을 눌러 주세요.')
+      }
       return wallet.transferWon(amountKwh, supplierWallet, rate)
     },
-    [wallet],
+    [isCustomMode, confirmedP2pWallet, wallet],
   )
 
   return (
@@ -193,33 +233,42 @@ export default function ConsumerDashboard({ wallet }: Props) {
         </div>
 
         {isCustomMode && (
-          <div className="flex flex-col sm:flex-row gap-2 p-3 border border-brand-100/30 bg-brand-10/10 rounded-lg mt-1">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-100/70" />
-              <input
-                type="text"
-                value={customSupplierWallet}
-                onChange={(e) => handleSupplierWalletChange(e.target.value)}
-                placeholder="정산할 생산자 지갑 주소 입력 (0x...)"
-                className="w-full pl-9 pr-3 py-2 text-sm font-mono bg-bg-base border border-border-strong rounded-md text-fg-base focus:outline-none focus:border-brand-100"
-              />
+          <div className="flex flex-col gap-2 p-3 border border-brand-100/30 bg-brand-10/10 rounded-lg mt-1">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-100/70" />
+                <input
+                  type="text"
+                  value={customSupplierWallet}
+                  onChange={(e) => handleSupplierWalletChange(e.target.value)}
+                  placeholder="정산할 생산자 지갑 주소 입력 (0x...)"
+                  className="w-full pl-9 pr-3 py-2 text-sm font-mono bg-bg-base border border-border-strong rounded-md text-fg-base focus:outline-none focus:border-brand-100"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleP2pConfigure}
+                disabled={isConfiguringP2p || isFetchingPrice}
+                className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-brand-100 rounded-md hover:opacity-90 disabled:opacity-50 shrink-0"
+              >
+                <Settings className="w-4 h-4" />
+                {isConfiguringP2p ? '설정 중...' : '설정'}
+              </button>
             </div>
-            <div className="w-full sm:w-48 relative">
-              <input
-                type="text"
-                readOnly
-                value={
-                  isFetchingPrice
-                    ? '조회 중...'
-                    : customSupplierRate !== ''
-                      ? `${customSupplierRate} WON/kWh`
-                      : '단가 미설정'
-                }
-                className="w-full pl-3 pr-3 py-2 text-sm font-bold bg-bg-subtle border border-border-strong rounded-md text-fg-base opacity-80 cursor-default"
-              />
-            </div>
-            <p className="text-[10px] text-fg-muted sm:self-center sm:max-w-[140px]">
-              단가는 생산자 탭에서만 수정할 수 있습니다.
+            {confirmedP2pWallet && confirmedP2pRate != null && (
+              <p className="text-[10px] text-tag-cyan-100 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                정산 대상: <span className="font-mono">{confirmedP2pWallet}</span> · {confirmedP2pRate} WON/kWh
+              </p>
+            )}
+            {p2pConfigMessage && (
+              <p className={`text-[10px] flex items-center gap-1 ${p2pConfigMessage.includes('설정됨') ? 'text-tag-cyan-100' : 'text-tag-orange-100'}`}>
+                {p2pConfigMessage.includes('설정됨') ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                {p2pConfigMessage}
+              </p>
+            )}
+            <p className="text-[10px] text-fg-muted">
+              지갑 입력 → 「설정」으로 정산 대상 확정 → 아래 주간 정산에서 「정산하기」
             </p>
           </div>
         )}
@@ -286,6 +335,8 @@ export default function ConsumerDashboard({ wallet }: Props) {
               supplier={supplier}
               payerWallets={payerWallets}
               connectedWallet={wallet.address}
+              settlementReady={!isCustomMode || Boolean(confirmedP2pWallet)}
+              settlementBlockedHint="P2P 생산자 지갑을 입력하고 「설정」을 눌러 주세요."
               onTransfer={handleSettleTransfer}
               onSettlementDone={refetchSettlements}
             />
