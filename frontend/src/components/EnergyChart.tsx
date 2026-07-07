@@ -22,7 +22,7 @@ import {
   zoomOutView,
   expandWindowView,
 } from '../lib/candleAggregation'
-import { toDeltaReadings, sortReadings } from '../lib/readingDelta'
+import { sortReadings } from '../lib/readingDelta'
 
 interface CumulativeBadge {
   label: string
@@ -86,7 +86,7 @@ function formatAxisRange(startMs: number, endMs: number): string {
 export default function EnergyChart({
   readings,
   cumulativeBadge,
-  readingsAreDelta = false,
+  readingsAreDelta = true,
   volumeLabel = '전송량',
   chartTitle = '전력 전송량 차트',
 }: Props) {
@@ -96,10 +96,7 @@ export default function EnergyChart({
   const prevBarCountRef = useRef(0)
   const preExpandViewRef = useRef<TimeView | null>(null)
 
-  const deltaReadings = useMemo(
-    () => (readingsAreDelta ? sortReadings(readings) : toDeltaReadings(readings)),
-    [readings, readingsAreDelta],
-  )
+  const deltaReadings = useMemo(() => sortReadings(readings), [readings])
   const rawBars = useMemo(() => buildVolumeBars(deltaReadings, interval), [deltaReadings, interval])
   const extent = useMemo(() => getNavExtent(rawBars), [rawBars])
   const hasData = rawBars.length > 0
