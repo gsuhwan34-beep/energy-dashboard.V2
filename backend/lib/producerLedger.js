@@ -2,7 +2,7 @@
 const PRODUCER_METER_ADDRESS = '0x9F9013b71f59d8ecf4730B4946F988827e3EE2A8';
 const PRODUCER_METER_ABI = ['event EnergyProduced(address indexed producer, uint256 powerValue, uint256 timestamp)'];
 
-const PRODUCER_LEDGER_ADDRESS = '0x0FF53BB6f54A08aBf410f64b6103100d5bF9404d';
+const PRODUCER_LEDGER_ADDRESS = '0x19dc4197F13dD63dA63Dc124D7f41c69AAcb8AA2';
 const PRODUCER_LEDGER_ABI = [
   'event EnergySold(address indexed producer, address indexed buyer, uint256 soldWh, uint256 cumulativeSoldWh, uint256 wonPaid, uint256 timestamp)',
   'function getStats(address producer) view returns (uint256 totalProducedWh, uint256 totalSoldWh, uint256 availableWh, uint256 lastUpdate, uint256 rate)',

@@ -213,11 +213,10 @@ async function buildProducerPayload(producer) {
   const ledgerSales = await fetchLedgerSales(producer);
   const wonSales = await fetchWonInboundSales(producer, ratePerKwh);
   const salesByTx = new Map();
-  for (const s of [...wonSales, ...ledgerSales]) salesByTx.set(s.txHash.toLowerCase(), s);
+  for (const s of [...ledgerSales, ...wonSales]) salesByTx.set(s.txHash.toLowerCase(), s);
   const sales = Array.from(salesByTx.values()).sort((a, b) => a.timestamp - b.timestamp);
 
-  const soldWhFromWon = wonSales.reduce((sum, s) => sum + s.wh, 0);
-  const soldWh = Math.max(ledgerSoldWh, soldWhFromWon);
+  const soldWh = ledgerSoldWh > 0 ? ledgerSoldWh : wonSales.reduce((sum, s) => sum + s.wh, 0);
   const availableWh = Math.max(0, Number((meterTotalWh - soldWh).toFixed(4)));
   const totalWonReceived = Number(sales.reduce((sum, s) => sum + s.wonAmount, 0).toFixed(6));
 
