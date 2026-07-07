@@ -121,34 +121,39 @@ async function fetchProducerProductions(producer) {
 }
 
 async function fetchLedgerSales(producer) {
-  const soldFilter = producerLedgerContract.filters.EnergySold(producer);
-  const soldLogs = await producerLedgerContract.queryFilter(soldFilter, START_BLOCK, 'latest');
+  try {
+    const soldFilter = producerLedgerContract.filters.EnergySold(producer);
+    const soldLogs = await producerLedgerContract.queryFilter(soldFilter, START_BLOCK, 'latest');
 
-  const sales = soldLogs.map((log) => {
-    const soldWh = Number(log.args.soldWh ?? log.args[2]);
-    const wonPaid = Number(ethers.formatUnits(log.args.wonPaid ?? log.args[4] ?? log.args[5], 18));
-    const timestamp = Number(log.args.timestamp ?? log.args[5] ?? log.args[6]);
-    const buyer = ethers.getAddress(log.args.buyer ?? log.args[1]);
-    const ratePerKwh = soldWh > 0 ? Number(((wonPaid / soldWh) * 1000).toFixed(2)) : 0;
-    return {
-      txHash: log.transactionHash,
-      blockNumber: log.blockNumber,
-      timestamp,
-      from: buyer,
-      to: producer,
-      wonAmount: wonPaid,
-      kWh: Number((soldWh / 1000).toFixed(6)),
-      wh: soldWh,
-      weekIndex: -1,
-      weekLabel: '온체인 P2P 구매',
-      ratePerKwh,
-      meterReadingCount: 0,
-      verified: true,
-    };
-  });
+    const sales = soldLogs.map((log) => {
+      const soldWh = Number(log.args.soldWh ?? log.args[2]);
+      const wonPaid = Number(ethers.formatUnits(log.args.wonPaid ?? log.args[5] ?? log.args[4], 18));
+      const timestamp = Number(log.args.timestamp ?? log.args[6] ?? log.args[5]);
+      const buyer = ethers.getAddress(log.args.buyer ?? log.args[1]);
+      const ratePerKwh = soldWh > 0 ? Number(((wonPaid / soldWh) * 1000).toFixed(2)) : 0;
+      return {
+        txHash: log.transactionHash,
+        blockNumber: log.blockNumber,
+        timestamp,
+        from: buyer,
+        to: producer,
+        wonAmount: wonPaid,
+        kWh: Number((soldWh / 1000).toFixed(6)),
+        wh: soldWh,
+        weekIndex: -1,
+        weekLabel: '온체인 P2P 구매',
+        ratePerKwh,
+        meterReadingCount: 0,
+        verified: true,
+      };
+    });
 
-  sales.sort((a, b) => a.timestamp - b.timestamp);
-  return sales;
+    sales.sort((a, b) => a.timestamp - b.timestamp);
+    return sales;
+  } catch (err) {
+    console.warn('Ledger EnergySold query skipped:', err.message);
+    return [];
+  }
 }
 
 /** 생산자 지갑으로 직접 들어온 WON 송금 → 판매 기록 (P2P transferWon) */
@@ -188,10 +193,18 @@ async function fetchWonInboundSales(producer, ratePerKwh) {
 
 async function buildProducerPayload(producer) {
   const { productions, meterTotalWh } = await fetchProducerProductions(producer);
-  const ledgerStats = await producerLedgerContract.getStats(producer);
-  const ledgerProducedWh = Number(ledgerStats.totalProducedWh);
-  const ledgerSoldWh = Number(ledgerStats.totalSoldWh);
-  const onChainRate = Number(ledgerStats.rate);
+
+  let ledgerProducedWh = 0;
+  let ledgerSoldWh = 0;
+  let onChainRate = 0;
+  try {
+    const ledgerStats = await producerLedgerContract.getStats(producer);
+    ledgerProducedWh = Number(ledgerStats.totalProducedWh);
+    ledgerSoldWh = Number(ledgerStats.totalSoldWh);
+    onChainRate = Number(ledgerStats.rate);
+  } catch (err) {
+    console.warn('Ledger getStats skipped:', err.message);
+  }
 
   const ratePerKwh = onChainRate > 0
     ? onChainRate
