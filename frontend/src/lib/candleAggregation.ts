@@ -111,10 +111,9 @@ export function getNavExtent(bars: VolumeBar[]): NavExtent {
   return { navStartMs, navEndMs }
 }
 
-export function defaultTimeView(interval: CandleInterval, extent: NavExtent, bars: VolumeBar[]): TimeView {
-  const lastMs = bars.length ? bars[bars.length - 1].time : extent.navEndMs
+export function defaultTimeView(interval: CandleInterval, extent: NavExtent, _bars: VolumeBar[]): TimeView {
   return {
-    viewEndMs: lastMs,
+    viewEndMs: extent.navEndMs,
     windowMs: DEFAULT_WINDOW_MS[interval],
   }
 }

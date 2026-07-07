@@ -116,6 +116,8 @@ export default function EnergyChart({
     [],
   )
 
+  const lastReadingTs = readings.length ? readings[readings.length - 1].timestamp : 0
+
   useEffect(() => {
     if (!rawBars.length) return
     applyDefaultView(interval, extent, rawBars)
@@ -127,11 +129,23 @@ export default function EnergyChart({
       prevBarCountRef.current = 0
       return
     }
-    if (prevBarCountRef.current === 0 && !userControlledView.current) {
+    if (!userControlledView.current) {
       applyDefaultView(interval, extent, rawBars)
     }
     prevBarCountRef.current = rawBars.length
-  }, [rawBars.length, interval, extent, rawBars, applyDefaultView])
+  }, [rawBars.length, lastReadingTs, interval, extent, rawBars, applyDefaultView])
+
+  /** 사용자가 팬/줌하지 않았으면 1분마다 「지금」 기준으로 창 이동 */
+  useEffect(() => {
+    if (!rawBars.length) return
+    const id = setInterval(() => {
+      if (userControlledView.current) return
+      setTimeView((prev) =>
+        clampTimeView({ viewEndMs: Date.now(), windowMs: prev.windowMs }, getNavExtent(rawBars)),
+      )
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [rawBars])
 
   useEffect(() => {
     if (!isExpanded) return
@@ -145,11 +159,16 @@ export default function EnergyChart({
   const clampedView = useMemo(() => clampTimeView(timeView, extent), [timeView, extent])
   const { startMs, endMs } = useMemo(() => getViewRange(clampedView), [clampedView])
 
-  /** 틱: 전체 포인트 유지(팬 시 즉시 표시). 집계: 보이는 구간 버킷 채움 */
+  /** 틱: 보이는 구간만. 집계: 보이는 구간 버킷 채움 */
   const seriesBars = useMemo(() => {
-    if (interval === 'tick') return rawBars
+    if (interval === 'tick') {
+      return rawBars.filter((b) => b.time >= startMs && b.time <= endMs)
+    }
     return barsForView(rawBars, interval, startMs, endMs)
   }, [rawBars, interval, startMs, endMs])
+
+  const visibleHasBars = seriesBars.some((b) => b.volume > 0)
+  const lastBarTime = rawBars.length ? rawBars[rawBars.length - 1].time : null
 
   const subtitle = useMemo(() => getVolumeSubtitle(interval, rawBars.length), [interval, rawBars.length])
   const viewRangeLabel = formatAxisRange(startMs, endMs)
@@ -403,17 +422,31 @@ export default function EnergyChart({
             )}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden relative">
             {hasData ? (
-              <div className="h-full w-full overflow-hidden">
-                <ReactECharts
-                  option={option}
-                  style={{ height: chartHeight, width: '100%' }}
-                  opts={{ renderer: 'svg' }}
-                  notMerge
-                  onEvents={onChartEvents}
-                />
-              </div>
+              <>
+                <div className="h-full w-full overflow-hidden">
+                  <ReactECharts
+                    option={option}
+                    style={{ height: chartHeight, width: '100%' }}
+                    opts={{ renderer: 'svg' }}
+                    notMerge
+                    onEvents={onChartEvents}
+                  />
+                </div>
+                {!visibleHasBars && (
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 mx-6 p-3 rounded-lg bg-bg-base/90 border border-border-strong text-center pointer-events-none">
+                    <p className="text-sm text-fg-muted">
+                      {getDefaultWindowLabel(interval)} 구간에 기록 없음
+                    </p>
+                    {lastBarTime != null && (
+                      <p className="text-xs text-fg-muted/80 mt-1">
+                        마지막 전송: {new Date(lastBarTime).toLocaleString('ko-KR')} · 차트 드래그로 과거 조회
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
             ) : (
               <div
                 className="flex items-center justify-center text-sm text-fg-muted"
