@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { BrowserProvider, Contract, MaxUint256, parseUnits } from 'ethers'
+import { BrowserProvider, Contract, MaxUint256, formatUnits, getAddress, parseUnits } from 'ethers'
 import { PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, LEDGER_ERROR_MESSAGES } from '../lib/producerLedger'
 
 // ── 상수 ──
@@ -20,6 +20,7 @@ const WON_TOKEN_ABI = [
   'function transfer(address to, uint amount) returns (bool)',
   'function approve(address spender, uint256 amount) returns (bool)',
   'function allowance(address owner, address spender) view returns (uint256)',
+  'function balanceOf(address owner) view returns (uint256)',
 ]
 
 // ── 에너지 공급자 설정 ──
@@ -190,6 +191,7 @@ export function useWallet() {
       throw new Error('지갑이 연결되어 있지 않습니다.')
     }
 
+    const producer = getAddress(producerWallet)
     const whInt = BigInt(Math.max(1, Math.round(whAmount)))
     const provider = new BrowserProvider(window.ethereum)
     const signer = await provider.getSigner()
@@ -200,22 +202,28 @@ export function useWallet() {
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ? (feeData.maxPriorityFeePerGas * 150n) / 100n : undefined,
     }
 
-    const ledger = new Contract(PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, signer)
-    const rate = await ledger.ratePerKwh(producerWallet)
+    const ledger = new Contract(getAddress(PRODUCER_LEDGER_ADDRESS), PRODUCER_LEDGER_ABI, signer)
+    const rate = await ledger.ratePerKwh(producer)
     if (rate === 0n) {
       throw new Error('생산자 단가가 온체인에 없습니다. 생산자 탭에서 MetaMask 연결 후 단가를 저장해 주세요.')
     }
 
     const wonCost = (whInt * rate * 10n ** 18n) / 1000n
-    const won = new Contract(WON_TOKEN_ADDRESS, WON_TOKEN_ABI, signer)
-    const allowance: bigint = await won.allowance(buyer, PRODUCER_LEDGER_ADDRESS)
+    const won = new Contract(getAddress(WON_TOKEN_ADDRESS), WON_TOKEN_ABI, signer)
+    const balance: bigint = await won.balanceOf(buyer)
+    if (balance < wonCost) {
+      throw new Error(`WON 잔액이 부족합니다. 필요: ${formatUnits(wonCost, 18)} WON`)
+    }
+
+    const ledgerAddr = getAddress(PRODUCER_LEDGER_ADDRESS)
+    const allowance: bigint = await won.allowance(buyer, ledgerAddr)
 
     try {
       if (allowance < wonCost) {
-        const approveTx = await won.approve(PRODUCER_LEDGER_ADDRESS, MaxUint256, gasOpts)
+        const approveTx = await won.approve(ledgerAddr, MaxUint256, gasOpts)
         await approveTx.wait()
       }
-      const tx = await ledger.purchaseEnergy(producerWallet, whInt, gasOpts)
+      const tx = await ledger.purchaseEnergy(producer, whInt, gasOpts)
       const receipt = await tx.wait()
       if (!receipt) throw new Error('정산 트랜잭션이 확인되지 않았습니다.')
       return receipt.hash
@@ -240,7 +248,7 @@ export function useWallet() {
     }
     const provider = new BrowserProvider(window.ethereum)
     const signer = await provider.getSigner()
-    const ledger = new Contract(PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, signer)
+    const ledger = new Contract(getAddress(PRODUCER_LEDGER_ADDRESS), PRODUCER_LEDGER_ABI, signer)
     const tx = await ledger.setRate(Math.round(rate))
     const receipt = await tx.wait()
     return receipt.hash

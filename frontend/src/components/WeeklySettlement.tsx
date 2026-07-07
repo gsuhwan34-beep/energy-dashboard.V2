@@ -110,6 +110,12 @@ function paymentMatchesWeekEnergy(
   if (week.isEmpty && week.totalKWh <= 0) return transfer.wonAmount <= 0.01
   if (week.totalKWh <= 0) return false
 
+  // P2P 원장 EnergySold — Wh 기준 매칭 (단가·반올림 차이 무시)
+  if (transfer.soldWh != null && transfer.soldWh > 0 && week.totalWh > 0) {
+    const whDiff = Math.abs(transfer.soldWh - week.totalWh)
+    if (whDiff <= Math.max(1, week.totalWh * 0.08)) return true
+  }
+
   const rates = [...new Set([...PRESET_SETTLEMENT_RATES, ...extraRates.filter(r => r > 0)])]
   for (const rate of rates) {
     if (amountsMatch(week.totalKWh * rate, transfer.wonAmount)) return true

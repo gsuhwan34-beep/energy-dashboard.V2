@@ -96,6 +96,8 @@ export interface SettlementTransfer {
   from: string
   to: string
   wonAmount: number
+  /** P2P 원장 purchaseEnergy 시 판매 Wh (주차 매칭용) */
+  soldWh?: number
 }
 
 export interface SettlementResponse {

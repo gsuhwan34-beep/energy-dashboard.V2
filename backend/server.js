@@ -120,6 +120,52 @@ async function fetchProducerProductions(producer) {
   return { productions, meterTotalWh };
 }
 
+/** P2P 원장 purchaseEnergy → EnergySold (정산 조회용) */
+async function fetchLedgerPurchaseTransfers(producer, buyerFilter) {
+  try {
+    const producerAddr = ethers.getAddress(producer);
+    const filter = producerLedgerContract.filters.EnergySold(producerAddr);
+    const logs = await producerLedgerContract.queryFilter(filter, START_BLOCK, 'latest');
+
+    const transfers = [];
+    for (const log of logs) {
+      const buyer = ethers.getAddress(log.args.buyer ?? log.args[1]);
+      if (buyerFilter && buyer.toLowerCase() !== buyerFilter.toLowerCase()) continue;
+
+      const soldWh = Number(log.args.soldWh ?? log.args[2]);
+      const wonPaid = Number(ethers.formatUnits(log.args.wonPaid ?? log.args[4], 18));
+      let timestamp = Number(log.args.timestamp ?? log.args[5]);
+      if (!timestamp) timestamp = await getBlockTimestamp(log.blockNumber);
+
+      transfers.push({
+        txHash: log.transactionHash,
+        blockNumber: log.blockNumber,
+        timestamp,
+        from: buyer,
+        to: producerAddr,
+        wonAmount: wonPaid,
+        soldWh,
+      });
+    }
+
+    transfers.sort((a, b) => a.timestamp - b.timestamp);
+    return transfers;
+  } catch (err) {
+    console.warn('Ledger purchase transfers skipped:', err.message);
+    return [];
+  }
+}
+
+async function getOnChainProducerRate(producer) {
+  try {
+    const rate = await producerLedgerContract.ratePerKwh(ethers.getAddress(producer));
+    const n = Number(rate);
+    return n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function fetchLedgerSales(producer) {
   try {
     const soldFilter = producerLedgerContract.filters.EnergySold(producer);
@@ -421,8 +467,23 @@ app.get('/api/energy/settlements', async (req, res) => {
           .map((p) => Number(p))
           .filter((n) => Number.isFinite(n) && n > 0);
 
+        if (isValidAddress(supplierParam)) {
+          const onChainRate = await getOnChainProducerRate(supplierParam);
+          if (onChainRate > 0) extraRates.push(onChainRate);
+        }
+
         const verified = findMeterVerifiedTransfers(readings, candidate, extraRates);
         for (const t of verified) {
+          if (seenTx.has(t.txHash)) continue;
+          seenTx.add(t.txHash);
+          allTransfers.push(t);
+        }
+      }
+
+      // P2P 원장 EnergySold — WON Transfer와 별도로 purchaseEnergy tx 직접 인식
+      if (isValidAddress(supplierParam)) {
+        const ledgerPurchases = await fetchLedgerPurchaseTransfers(supplierParam, consumer);
+        for (const t of ledgerPurchases) {
           if (seenTx.has(t.txHash)) continue;
           seenTx.add(t.txHash);
           allTransfers.push(t);
@@ -468,13 +529,16 @@ app.post('/api/supplier/price', (req, res) => {
   res.json({ success: true, wallet: key, price: supplierPrices[key] });
 });
 
-app.get('/api/supplier/price/:wallet', (req, res) => {
+app.get('/api/supplier/price/:wallet', async (req, res) => {
   const wallet = req.params.wallet.toLowerCase();
   if (!isValidAddress(wallet)) {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
-  const price = supplierPrices[wallet] !== undefined ? supplierPrices[wallet] : 150;
-  res.json({ wallet, price });
+  let price = supplierPrices[wallet];
+  const onChainRate = await getOnChainProducerRate(wallet);
+  if (onChainRate > 0) price = onChainRate;
+  if (price === undefined) price = 150;
+  res.json({ wallet, price, onChainRate });
 });
 
 // ----------------------------------------------------

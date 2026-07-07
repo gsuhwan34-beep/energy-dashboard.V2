@@ -75,7 +75,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
 
   // settlements는 useConsumerSettlements(계량 지갑) API 결과 — payerWallets는 조회용
   const { data: settlementData, refetch: refetchSettlements } = useConsumerSettlements(
-    /^0x[a-fA-F0-9]{40}$/.test(activeWallet) ? [activeWallet] : payerWallets,
+    payerWallets,
     isCustomMode && confirmedP2pWallet ? confirmedP2pWallet : undefined,
   )
 
@@ -92,7 +92,9 @@ export default function ConsumerDashboard({ wallet }: Props) {
       if (!res.ok) throw new Error('price fetch failed')
       const resData = await res.json()
       lastFetchedWalletRef.current = normalized
-      return Number(resData.price)
+      const onChain = Number(resData.onChainRate)
+      const price = Number(resData.price)
+      return onChain > 0 ? onChain : price
     } catch (err) {
       console.error('단가 조회 실패:', err)
       return null
