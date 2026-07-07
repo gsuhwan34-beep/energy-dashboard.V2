@@ -151,23 +151,66 @@ async function fetchLedgerSales(producer) {
   return sales;
 }
 
+/** 생산자 지갑으로 직접 들어온 WON 송금 → 판매 기록 (P2P transferWon) */
+async function fetchWonInboundSales(producer, ratePerKwh) {
+  const filter = wonContract.filters.Transfer(null, producer);
+  const logs = await wonContract.queryFilter(filter, START_BLOCK, 'latest');
+  const rate = ratePerKwh > 0 ? ratePerKwh : 150;
+
+  const sales = logs.map((log) => {
+    const wonPaid = Number(ethers.formatUnits(log.args[2], 18));
+    const buyer = ethers.getAddress(log.args[0]);
+    const wh = Math.round((wonPaid / rate) * 1000);
+    return {
+      txHash: log.transactionHash,
+      blockNumber: log.blockNumber,
+      timestamp: 0,
+      from: buyer,
+      to: producer,
+      wonAmount: wonPaid,
+      kWh: Number((wh / 1000).toFixed(6)),
+      wh: Math.max(0, wh),
+      weekIndex: -1,
+      weekLabel: 'WON P2P 정산',
+      ratePerKwh: rate,
+      meterReadingCount: 0,
+      verified: true,
+    };
+  });
+
+  for (const sale of sales) {
+    sale.timestamp = await getBlockTimestamp(sale.blockNumber);
+  }
+
+  sales.sort((a, b) => a.timestamp - b.timestamp);
+  return sales;
+}
+
 async function buildProducerPayload(producer) {
   const { productions, meterTotalWh } = await fetchProducerProductions(producer);
   const ledgerStats = await producerLedgerContract.getStats(producer);
   const ledgerProducedWh = Number(ledgerStats.totalProducedWh);
-  const soldWh = Number(ledgerStats.totalSoldWh);
+  const ledgerSoldWh = Number(ledgerStats.totalSoldWh);
   const onChainRate = Number(ledgerStats.rate);
-  const onChainAvailableWh = Math.max(0, ledgerProducedWh - soldWh);
-  const availableWh = Math.max(0, Number((meterTotalWh - soldWh).toFixed(4)));
-  const ledgerSyncNeeded = ledgerProducedWh + 0.0001 < meterTotalWh;
-  const sales = await fetchLedgerSales(producer);
-  const totalWonReceived = Number(sales.reduce((sum, s) => sum + s.wonAmount, 0).toFixed(6));
 
   const ratePerKwh = onChainRate > 0
     ? onChainRate
     : supplierPrices[producer.toLowerCase()] !== undefined
       ? supplierPrices[producer.toLowerCase()]
       : 150;
+
+  const ledgerSales = await fetchLedgerSales(producer);
+  const wonSales = await fetchWonInboundSales(producer, ratePerKwh);
+  const salesByTx = new Map();
+  for (const s of [...wonSales, ...ledgerSales]) salesByTx.set(s.txHash.toLowerCase(), s);
+  const sales = Array.from(salesByTx.values()).sort((a, b) => a.timestamp - b.timestamp);
+
+  const soldWhFromWon = wonSales.reduce((sum, s) => sum + s.wh, 0);
+  const soldWh = Math.max(ledgerSoldWh, soldWhFromWon);
+  const onChainAvailableWh = Math.max(0, ledgerProducedWh - ledgerSoldWh);
+  const availableWh = Math.max(0, Number((meterTotalWh - soldWh).toFixed(4)));
+  const ledgerSyncNeeded = ledgerProducedWh + 0.0001 < meterTotalWh;
+  const totalWonReceived = Number(sales.reduce((sum, s) => sum + s.wonAmount, 0).toFixed(6));
 
   const currentBlock = await provider.getBlockNumber();
 
@@ -345,6 +388,9 @@ app.get('/api/energy/settlements', async (req, res) => {
         Object.keys(supplierPrices).forEach((w) => {
           if (isValidAddress(w)) supplierSet.add(w.toLowerCase());
         });
+        if (isValidAddress(supplierParam)) {
+          supplierSet.add(ethers.getAddress(supplierParam).toLowerCase());
+        }
 
         const candidate = [];
         const candidateSeen = new Set();

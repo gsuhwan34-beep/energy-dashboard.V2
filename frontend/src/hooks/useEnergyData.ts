@@ -104,7 +104,7 @@ export interface SettlementResponse {
 }
 
 // 구매자(계량기/결제) 지갑 기준 정산 조회 — 선택한 공급자 탭과 무관
-export function useConsumerSettlements(payerWallets: string[]) {
+export function useConsumerSettlements(payerWallets: string[], supplierWallet?: string) {
   const [data, setData] = useState<SettlementResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -114,14 +114,19 @@ export function useConsumerSettlements(payerWallets: string[]) {
     .sort()
     .join(',')
 
+  const supplierKey = supplierWallet && /^0x[a-fA-F0-9]{40}$/.test(supplierWallet)
+    ? supplierWallet.toLowerCase()
+    : ''
+
   const refetch = useCallback(async () => {
     const wallets = walletKey.split(',').filter(Boolean)
     if (!wallets.length) return
+    const supplierQuery = supplierKey ? `&supplier=${supplierKey}` : ''
     try {
       setLoading(true)
       const results = await Promise.all(
         wallets.map(async (wallet) => {
-          const res = await fetch(api(`energy/settlements?consumer=${wallet}`))
+          const res = await fetch(api(`energy/settlements?consumer=${wallet}${supplierQuery}`))
           if (!res.ok) return [] as SettlementTransfer[]
           const json = await res.json()
           return (json.transfers ?? []) as SettlementTransfer[]
@@ -140,7 +145,7 @@ export function useConsumerSettlements(payerWallets: string[]) {
     } finally {
       setLoading(false)
     }
-  }, [walletKey])
+  }, [walletKey, supplierKey])
 
   useEffect(() => {
     refetch()
