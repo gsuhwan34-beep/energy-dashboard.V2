@@ -49,7 +49,12 @@ export interface ShowcaseTab {
   shortDesc: string
   imageCaption: string
   heroImage?: string
+  /** 요약 모달 — 2번째 사진 (예: 이창용 전 총재 보도) */
   modalPhoto?: string
+  modalPhotoCaption?: string
+  /** 메인 썸네일 — 2번째 사진 (예: 이창용 전 총재 국회 슬라이드) */
+  secondaryPhoto?: string
+  secondaryImageCaption?: string
   detailTitle: string
   summaryBullets: SummaryBullet[]
   reportTitle: string
@@ -368,54 +373,84 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     id: 4,
     icon: Coins,
     accent: 'indigo',
-    title: '원화 스테이블코인 연계',
-    tagline: 'WON → CBDC · 금융 혁신',
+    title: '통합원장 · 예금 토큰 연계',
+    tagline: 'Unified Ledger · Project Hangang',
     shortDesc:
-      '한국은행 원화 예금 토큰(CBDC) 정책 및 실거래 테스트와 직접 연동되는 차세대 디지털 결제 인프라입니다.',
-    imageCaption: '이창용 총재 · 원화 스테이블코인 (2025.8.19 국회)',
-    heroImage: '/presentation/bok-governor-slide.png',
+      'BIS 「통합원장」 창시자 신현송 총재 취임 이후 가속화되는 「프로젝트 한강」·「프로젝트 아고라」와 연동 가능한 에너지 엣지 정산 인프라입니다.',
+    imageCaption: '신현송 총재 · 통합원장·디지털 화폐 포럼 (2026.7)',
+    secondaryImageCaption: '이창용 전 총재 · 원화 스테이블코인 국회 발언 (2025.8.19)',
+    heroImage: '/presentation/bok-shin-forum.png',
+    secondaryPhoto: '/presentation/bok-governor-slide.png',
     modalPhoto: '/presentation/bok-governor-news.png',
-    detailTitle: '차세대 에너지 핀테크 (CBDC Network)',
+    modalPhotoCaption: '이창용 전 총재 · 디지털 화폐·스테이블코인 관련 보도 (2025)',
+    detailTitle: '통합원장 생태계와 에너지 엣지 정산 (CBDC Network)',
     summaryBullets: [
       {
         icon: Globe,
         segments: [
-          seg('PayPal·Visa 등 '),
-          seg('스테이블코인 결제', true),
-          seg('는 이미 상용화'),
+          seg('2026년 4월 '),
+          seg('신현송', true),
+          seg(' 총재 취임 — BIS 재직 시 '),
+          seg('통합원장(Unified Ledger)', true),
+          seg('을 최초 제안·주도했던 인물이 한국은행을 이끌며 '),
+          seg('예금 토큰·토큰화 결제', true),
+          seg(' 정책이 본격 가속화'),
         ],
       },
       {
         icon: Landmark,
         segments: [
-          seg('한국은행 「프로젝트 한강」', true),
+          seg('「'),
+          seg('프로젝트 한강', true),
+          seg('」 2단계(참여 은행 9개·EV 충전 '),
+          seg('PBM', true),
+          seg(') · BIS 「'),
+          seg('프로젝트 아고라', true),
+          seg('」 '),
+          seg('실거래(real-value) 테스트', true),
           seg(' — '),
-          seg('원화 스테이블코인 정책', true),
-          seg('과 정합합니다.'),
+          seg('은행 주도 예금 토큰', true),
+          seg('(민간 단독 스테이블코인과 구별)'),
         ],
       },
       {
         icon: Link2,
         segments: [
-          seg('토큰 정산 → 향후 '),
-          seg('원화 CBDC', true),
-          seg('와 '),
-          seg('즉시 연동 가능', true),
-          seg('한 차세대 설계입니다.'),
+          seg('MVP 그리드랩 '),
+          seg('온체인 계량·P2P 정산', true),
+          seg('은 향후 '),
+          seg('통합원장', true),
+          seg(' 위 '),
+          seg('예금 토큰·PBM', true),
+          seg('과 '),
+          seg('즉시 연동(Plug-in)', true),
+          seg(' 가능한 '),
+          seg('Programmable Energy Market', true),
+          seg(' 엣지 인프라'),
         ],
       },
     ],
-    reportTitle: '국가 디지털 화폐(CBDC) 연계 차세대 핀테크망',
+    reportTitle: '통합원장·예금 토큰과 에너지 마이크로 정산의 접점',
     reportSections: [
       {
+        heading: 'BIS 통합원장과 정책 전환',
         paragraphs: [
-          '현재 전 세계 금융 시장의 가장 뜨거운 화두는 단연 스테이블코인과 디지털 화폐(CBDC)입니다. 페이팔(PayPal)이 자체 스테이블코인을 발행하고 비자(Visa)가 결제망에 이를 연동하는 등, 글로벌 결제 인프라는 이미 블록체인 위로 올라탔습니다. 국내에서도 네이버, 카카오 등 빅테크 기업들이 블록체인 인프라와 결제 사업을 융합하기 위해 사활을 걸고 있으며, 특히 한국은행은 예금 토큰 기반의 디지털 화폐(CBDC) 도입을 위한 프로젝트 한강 파일럿 테스트를 본격적으로 추진하며 국가 주도의 디지털 금융 혁신에 시동을 걸었습니다.',
+          '국제결제은행(BIS)이 제시한 「통합원장(Unified Ledger)」은 중앙은행 화폐, commercial bank money(예금), 그리고 기타 금융·비금융 자산을 하나의 프로그래밍 가능한 원장 위에서 연결하는 글로벌 금융 인프라 구상입니다. 2026년 4월 21일부로 취임한 신현송 한국은행 총재는 BIS 재직 시 이 개념을 설계·주도했던 인물로, 그의 취임은 한국 금융 시스템에 통합원장·토큰화 예금을 빠르게 이식하겠다는 강한 정책 시그널로 해석됩니다.',
+          '한국은행은 테더(USDT)형 민간 단독 스테이블코인이 아니라, 통화정책·금융 안정 관점에서 은행이 직접 발행하거나 은행 중심 컨소시엄(지분 51% 이상)이 주도하는 「예금 토큰(Tokenized Deposits)」을 핵심으로 합니다. 이는 지급준비율 통제와 통화량 조절을 유지하면서도 블록체인 기반 실시간·소액 정산을 가능하게 하는 모델입니다.',
         ],
       },
       {
+        heading: '프로젝트 한강 · 프로젝트 아고라',
         paragraphs: [
-          'MVP 그리드랩의 P2P 에너지 거래망은 바로 이 거대한 금융 패러다임 전환을 정확히 정조준하고 있습니다. 현재 저희가 구현한 블록체인 토큰 기반의 스마트 컨트랙트 정산 시스템은, 향후 한국은행이 발행할 원화 기반 예금 토큰(CBDC)과 즉각적으로 연동(Plugging)이 가능하도록 설계된 차세대 인프라입니다.',
-          '에너지 산업과 최첨단 핀테크가 결합하는 그 교두보에 저희 시스템이 글로벌 표준으로서 자리매김할 것입니다.',
+          '국내 「프로젝트 한강」은 2026년 4월부터 2단계에 돌입해 참여 은행을 9개로 확대했으며, 전기차 충전 인프라 보조금 지급 등 PBM(특수지급·목적 기반 토큰) 활용 실증을 진행 중입니다. 한국은행은 2026년 5월 BIS와 공동 수행한 「프로젝트 아고라(Project Agorá)」 플랫폼 구축을 완료하고, 개념검증(PoC)을 넘어 실거래(real-value transactions) 테스트에 적극 참여하겠다고 발표했습니다.',
+          '즉, 국가 주도의 블록체인 기반 원화 결제 생태계는 이미 파일럿을 넘어 실사용 검증 단계로 진입하고 있으며, 에너지·보조금·마이크로그리드처럼 고빈도·소액·조건부 지급이 많은 영역이 자연스러운 적용처가 됩니다.',
+        ],
+      },
+      {
+        heading: 'MVP 그리드랩과의 연결',
+        paragraphs: [
+          'MVP 그리드랩은 IoT 계량 데이터를 퍼블릭 블록체인(Arbitrum Sepolia)에 불변 기록하고, WON ERC-20 토큰으로 P2P 에너지 정산을 시연합니다. 현재 토큰은 테스트넷 시연용이지만, 스마트 컨트랙트 구조는 「계량 조건 충족 → 토큰 실행」이라는 통합원장·PBM과 동일한 논리를 따릅니다.',
+          '프로젝트 한강 2단계의 EV 충전 보조금(PBM) 사례와 같이, 향후 생산·소비 Wh 데이터가 통합원장 상 예금 토큰과 연동되면 중간 청산소 없이 생산자–소비자 간 원자적 정산(Atomic Settlement)이 가능한 「Programmable Energy Market」으로 확장될 수 있습니다. 본 시스템은 그 전환을 앞당기는 에너지 엣지(Edge) 인프라입니다.',
         ],
       },
     ],

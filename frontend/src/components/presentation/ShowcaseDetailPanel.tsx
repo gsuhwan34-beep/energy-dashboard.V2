@@ -60,11 +60,36 @@ export function ShowcaseSummaryPanel({ tab, onOpenReport }: SummaryProps) {
     <div className="flex flex-col h-full min-h-0 gap-3">
       {tab.modalPhoto && (
         <div className="shrink-0 min-h-[min(280px,36vh)] max-h-[min(360px,42vh)] flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-3 mb-1">
-          <img
-            src={tab.modalPhoto}
-            alt={tab.imageCaption}
-            className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-sm"
-          />
+          {tab.secondaryPhoto ? (
+            <div className="w-full h-full grid grid-cols-2 gap-3 items-center">
+              <figure className="flex flex-col items-center justify-center min-h-0 h-full gap-1.5">
+                <img
+                  src={tab.heroImage ?? tab.modalPhoto}
+                  alt={tab.imageCaption}
+                  className="max-w-full max-h-[min(240px,32vh)] w-auto h-auto object-contain rounded-lg shadow-sm"
+                />
+                <figcaption className="text-[9px] text-slate-500 text-center leading-tight px-1">
+                  {tab.imageCaption}
+                </figcaption>
+              </figure>
+              <figure className="flex flex-col items-center justify-center min-h-0 h-full gap-1.5">
+                <img
+                  src={tab.modalPhoto}
+                  alt={tab.secondaryImageCaption ?? tab.imageCaption}
+                  className="max-w-full max-h-[min(240px,32vh)] w-auto h-auto object-contain rounded-lg shadow-sm"
+                />
+                <figcaption className="text-[9px] text-slate-500 text-center leading-tight px-1">
+                  {tab.modalPhotoCaption ?? tab.secondaryImageCaption}
+                </figcaption>
+              </figure>
+            </div>
+          ) : (
+            <img
+              src={tab.modalPhoto}
+              alt={tab.imageCaption}
+              className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-sm"
+            />
+          )}
         </div>
       )}
 
