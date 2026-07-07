@@ -134,10 +134,17 @@ export default function ConsumerDashboard({ wallet }: Props) {
         const res = await fetch(api(`producer?wallet=${encodeURIComponent(supplierWallet)}`))
         if (res.ok) {
           const prod = await res.json()
-          const available = Number(prod?.overview?.availableWh ?? 0)
-          if (totalWh > available + 0.001) {
+          if (prod?.overview?.ledgerSyncNeeded) {
             throw new Error(
-              `생산자 판매 가능량(${available.toLocaleString()} Wh)보다 정산량(${Math.round(totalWh).toLocaleString()} Wh)이 많습니다.`,
+              `생산자 원장 재고 동기화가 필요합니다. 생산자(${supplierWallet.slice(0, 6)}…${supplierWallet.slice(-4)}) 지갑으로 MetaMask 연결 → 생산자 탭 → 「재고 동기화」 후 다시 정산해 주세요.`,
+            )
+          }
+          const available = Number(prod?.overview?.availableWh ?? 0)
+          const onChainAvailable = Number(prod?.overview?.onChainAvailableWh ?? available)
+          const purchasable = Math.min(available, onChainAvailable > 0 ? onChainAvailable : available)
+          if (totalWh > purchasable + 0.001) {
+            throw new Error(
+              `생산자 판매 가능량(${purchasable.toLocaleString()} Wh)보다 정산량(${Math.round(totalWh).toLocaleString()} Wh)이 많습니다.`,
             )
           }
         }

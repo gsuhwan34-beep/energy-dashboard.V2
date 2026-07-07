@@ -10,5 +10,14 @@ export const PRODUCER_LEDGER_ABI = [
   'function getStats(address producer) view returns (uint256 totalProducedWh, uint256 totalSoldWh, uint256 availableWh, uint256 lastUpdate, uint256 rate)',
   'function purchaseEnergy(address producer, uint256 whAmount)',
   'function setRate(uint256 rate)',
+  'function recordProduction(address producer, uint256 deltaWh)',
   'function ratePerKwh(address producer) view returns (uint256)',
 ] as const
+
+/** Remix 배포본 custom error selector → 메시지 */
+export const LEDGER_ERROR_MESSAGES: Record<string, string> = {
+  '0x8b2024a5': '원장 재고 부족 — 생산자 탭에서 MetaMask로 「재고 동기화」 후 다시 정산해 주세요.',
+  '0x6a43f8d1': '생산자 단가가 온체인에 없습니다. 생산자 탭에서 단가를 저장해 주세요.',
+  '0xf499da20': 'WON 잔액 부족 또는 approve 실패입니다.',
+  '0x2c5211c6': '정산 전력량이 올바르지 않습니다.',
+}

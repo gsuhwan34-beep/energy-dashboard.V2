@@ -11,6 +11,9 @@ export interface ProducerOverview {
   soldWh: number
   availableKWh: number
   availableWh: number
+  ledgerProducedWh?: number
+  onChainAvailableWh?: number
+  ledgerSyncNeeded?: boolean
   verifiedSaleCount: number
   rawInboundCount: number
   firstProduction: EnergyReading | null

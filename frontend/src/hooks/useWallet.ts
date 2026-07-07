@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { BrowserProvider, Contract, parseUnits } from 'ethers'
-import { PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI } from '../lib/producerLedger'
+import { PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, LEDGER_ERROR_MESSAGES } from '../lib/producerLedger'
 
 // ── 상수 ──
 const ARBITRUM_SEPOLIA_CHAIN_ID = '0x66eee' // 421614 in hex
@@ -209,10 +209,44 @@ export function useWallet() {
     const approveTx = await won.approve(PRODUCER_LEDGER_ADDRESS, wonCost, gasOpts)
     await approveTx.wait()
 
-    const tx = await ledger.purchaseEnergy(producerWallet, whInt, gasOpts)
+    try {
+      const tx = await ledger.purchaseEnergy(producerWallet, whInt, gasOpts)
+      const receipt = await tx.wait()
+      return receipt.hash
+    } catch (err: unknown) {
+      const data = (err as { data?: string })?.data
+      if (typeof data === 'string') {
+        const selector = data.slice(0, 10).toLowerCase()
+        const msg = LEDGER_ERROR_MESSAGES[selector]
+        if (msg) throw new Error(msg)
+      }
+      throw err
+    }
+  }, [state.isConnected])
+
+  /** IoT 미터 합계 → 원장 totalProducedWh mirror (생산자 MetaMask 서명) */
+  const syncProducerLedgerFromMeter = useCallback(async (
+    producerWallet: string,
+    meterTotalWh: number,
+    ledgerProducedWh: number,
+  ): Promise<string | null> => {
+    if (!window.ethereum || !state.isConnected || !state.address) {
+      throw new Error('MetaMask를 연결해 주세요.')
+    }
+    if (state.address.toLowerCase() !== producerWallet.toLowerCase()) {
+      throw new Error('생산자 지갑(0x…)으로 MetaMask를 연결한 뒤 동기화해 주세요.')
+    }
+
+    const diff = Math.round(meterTotalWh - ledgerProducedWh)
+    if (diff <= 0) return null
+
+    const provider = new BrowserProvider(window.ethereum)
+    const signer = await provider.getSigner()
+    const ledger = new Contract(PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, signer)
+    const tx = await ledger.recordProduction(producerWallet, BigInt(diff))
     const receipt = await tx.wait()
     return receipt.hash
-  }, [state.isConnected])
+  }, [state.isConnected, state.address])
 
   const setProducerRateOnChain = useCallback(async (rate: number): Promise<string> => {
     if (!window.ethereum || !state.isConnected) {
@@ -269,7 +303,7 @@ export function useWallet() {
     }).catch(() => {})
   }, [checkNetwork])
 
-  return { ...state, connect, disconnect, transferWon, purchaseProducerEnergy, setProducerRateOnChain }
+  return { ...state, connect, disconnect, transferWon, purchaseProducerEnergy, setProducerRateOnChain, syncProducerLedgerFromMeter }
 }
 
 // Window 타입 확장
