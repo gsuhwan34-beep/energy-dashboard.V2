@@ -268,7 +268,8 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     tagline: '그린워싱 차단 · 즉시 발급',
     shortDesc:
       '전력 생산 즉시 블록체인에 영구 기록되어, 만연한 그린워싱을 차단하고 서류·시간 낭비 없이 증명서를 발급합니다.',
-    imageCaption: '온체인 RE100 · 그린워싱 차단',
+    imageCaption: 'RE100 Members · 400+ 기업 100% 재생에너지 약속',
+    heroImage: '/presentation/re100-members.png',
     detailTitle: '온체인 녹색 증명 (RE100 On-chain)',
     summaryBullets: [
       {
