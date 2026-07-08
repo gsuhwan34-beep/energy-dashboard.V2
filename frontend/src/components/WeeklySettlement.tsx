@@ -6,6 +6,7 @@ import {
   getSettlementMonthWeekRange,
   buildEpochWeekRows,
   getWeekIndex,
+  matchSettlementsToWeekRows,
 } from '../lib/settlementMatch'
 import {
   Calendar, Coins, CheckCircle2, Loader2,
@@ -35,78 +36,8 @@ interface Props {
   onSettlementDone: () => void
 }
 
-/**
- * 온체인 WON 전송 기록을 주차별로 매칭.
- * - 공급자(to), 구매자(from) 주소 일치
- * - 금액이 해당 주차 요금과 근사하게 일치
- * - 전송 시각이 해당 주차 시작 이후
- */
-function amountsMatch(expected: number, actual: number): boolean {
-  if (expected <= 0) return actual <= 0.01
-  const diff = Math.abs(expected - actual)
-  return diff <= Math.max(0.01, expected * 0.05)
-}
-
-function matchSettlementsToWeeks(
-  weeks: WeekRow[],
-  settlements: SettlementTransfer[],
-  supplierWallet: string,
-  consumerWallet?: string,
-): Record<number, { txHash: string; wonAmount: number; to: string }> {
-  const matched: Record<number, { txHash: string; wonAmount: number; to: string }> = {}
-  if (!settlements.length || !/^0x[a-fA-F0-9]{40}$/.test(supplierWallet)) return matched
-
-  const supplierLower = supplierWallet.toLowerCase()
-  const consumerLower = consumerWallet?.toLowerCase()
-
-  const eligible = settlements.filter((s) => {
-    if (s.to.toLowerCase() !== supplierLower) return false
-    if (consumerLower && s.from.toLowerCase() !== consumerLower) return false
-    return true
-  })
-
-  const weeksSorted = [...weeks]
-    .filter(w => !w.isCurrent)
-    .sort((a, b) => a.weekIndex - b.weekIndex)
-
-  const usedTx = new Set<string>()
-
-  for (const week of weeksSorted) {
-    if (week.wonAmount <= 0 && week.isEmpty) continue
-
-    const weekStartTs = Math.floor(week.start.getTime() / 1000)
-    const weekEndTs = Math.floor(week.end.getTime() / 1000)
-
-    let bestMatch: SettlementTransfer | null = null
-    let bestScore = Infinity
-
-    for (const s of eligible) {
-      if (usedTx.has(s.txHash)) continue
-      if (s.timestamp < weekStartTs) continue
-      if (!amountsMatch(week.wonAmount, s.wonAmount)) continue
-
-      const score = Math.abs(s.timestamp - weekEndTs)
-      if (score < bestScore) {
-        bestScore = score
-        bestMatch = s
-      }
-    }
-
-    if (bestMatch) {
-      matched[week.weekIndex] = {
-        txHash: bestMatch.txHash,
-        wonAmount: bestMatch.wonAmount,
-        to: bestMatch.to,
-      }
-      usedTx.add(bestMatch.txHash)
-    }
-  }
-
-  return matched
-}
-
 export default function WeeklySettlement({
-  readings, settlements, isWalletConnected, supplier, consumerWallet, onTransfer, onSettlementDone,
+  readings, settlements, isWalletConnected, supplier, onTransfer, onSettlementDone,
 }: Props) {
   const [justSettled, setJustSettled] = useState<Record<number, string>>({})
   const [settling, setSettling] = useState<number | null>(null)
@@ -145,8 +76,22 @@ export default function WeeklySettlement({
   }, [selectedMonth, readings, readingsByWeek, supplier.rate])
 
   const onchainSettled = useMemo(
-    () => matchSettlementsToWeeks(weeks, settlements, supplier.wallet, consumerWallet),
-    [weeks, settlements, supplier.wallet, consumerWallet],
+    () => matchSettlementsToWeekRows(
+      weeks.map(({ weekIndex, weekLabel, start, end, totalWh, totalKWh, isCurrent, isEmpty }) => ({
+        weekIndex,
+        weekLabel,
+        start,
+        end,
+        totalWh,
+        totalKWh,
+        isCurrent,
+        isEmpty,
+      })),
+      settlements,
+      supplier.wallet,
+      [supplier.rate],
+    ),
+    [weeks, settlements, supplier.wallet, supplier.rate],
   )
 
   async function handleSettle(week: WeekRow) {

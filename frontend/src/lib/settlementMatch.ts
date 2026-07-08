@@ -139,8 +139,16 @@ export function buildEpochWeekRows(
 
 function amountsMatch(expected: number, actual: number): boolean {
   if (expected <= 0) return actual <= 0.01
-  return Math.abs(expected - actual) <= Math.max(0.01, expected * 0.05)
+  return Math.abs(expected - actual) <= Math.max(0.05, expected * 0.08)
 }
+
+function whAmountsMatch(expectedWh: number, actualWh: number): boolean {
+  if (expectedWh <= 0) return actualWh <= 1
+  return Math.abs(expectedWh - actualWh) <= Math.max(1, expectedWh * 0.08)
+}
+
+/** 정산 트랜잭션을 주차 종료 후에도 인정 (다음 주에 정산하는 경우) */
+const SETTLEMENT_GRACE_SEC = 21 * 24 * 60 * 60
 
 function paymentMatchesWeekEnergy(
   weekKWh: number,
@@ -159,6 +167,87 @@ function paymentMatchesWeekEnergy(
     return { matched: true, rate: Number(implied.toFixed(2)) }
   }
   return { matched: false, rate: 0 }
+}
+
+export interface WeekSettlementMatch {
+  txHash: string
+  wonAmount: number
+  to: string
+}
+
+function transferMatchesWeek(
+  week: Pick<WeekRow, 'totalWh' | 'totalKWh'>,
+  transfer: SettlementTransfer,
+  extraRates: number[],
+): boolean {
+  if (week.totalKWh <= 0 && week.totalWh <= 0) return false
+
+  if (transfer.soldWh != null && transfer.soldWh > 0 && week.totalWh > 0) {
+    if (whAmountsMatch(week.totalWh, transfer.soldWh)) return true
+  }
+
+  if (week.totalKWh > 0) {
+    return paymentMatchesWeekEnergy(week.totalKWh, transfer.wonAmount, extraRates).matched
+  }
+
+  return false
+}
+
+/**
+ * 주간 정산 UI — 온체인 송금을 주차별로 매칭.
+ * 백엔드와 동일하게 150/100/P2P 단가·역산 단가·soldWh·정산 유예기간을 반영.
+ */
+export function matchSettlementsToWeekRows(
+  weeks: WeekRow[],
+  transfers: SettlementTransfer[],
+  supplierWallet: string,
+  extraRates: number[] = [],
+): Record<number, WeekSettlementMatch> {
+  const matched: Record<number, WeekSettlementMatch> = {}
+  if (!transfers.length || !/^0x[a-fA-F0-9]{40}$/i.test(supplierWallet)) return matched
+
+  const supplierLower = supplierWallet.toLowerCase()
+  const eligible = transfers.filter((t) => t.to.toLowerCase() === supplierLower)
+  const rates = [...new Set([...PRESET_SETTLEMENT_RATES, ...extraRates.filter((r) => r > 0)])]
+
+  const weeksSorted = weeks
+    .filter((w) => !w.isCurrent && w.totalKWh > 0)
+    .sort((a, b) => a.weekIndex - b.weekIndex)
+
+  const usedTx = new Set<string>()
+
+  for (const week of weeksSorted) {
+    const weekStartTs = Math.floor(week.start.getTime() / 1000)
+    const weekEndTs = Math.floor(week.end.getTime() / 1000)
+    const graceEndTs = weekEndTs + SETTLEMENT_GRACE_SEC
+
+    let best: SettlementTransfer | null = null
+    let bestScore = Infinity
+
+    for (const t of eligible) {
+      if (usedTx.has(t.txHash)) continue
+      if (t.timestamp < weekStartTs) continue
+      if (t.timestamp > graceEndTs) continue
+      if (!transferMatchesWeek(week, t, rates)) continue
+
+      const score = Math.abs(t.timestamp - weekEndTs)
+      if (score < bestScore) {
+        bestScore = score
+        best = t
+      }
+    }
+
+    if (best) {
+      matched[week.weekIndex] = {
+        txHash: best.txHash,
+        wonAmount: best.wonAmount,
+        to: best.to,
+      }
+      usedTx.add(best.txHash)
+    }
+  }
+
+  return matched
 }
 
 export function buildWeekRowsFromReadings(readings: EnergyReading[]): WeekRow[] {
@@ -216,6 +305,8 @@ export function matchVerifiedWeeklySettlements(
   for (const week of weeks) {
     const weekStartTs = Math.floor(week.start.getTime() / 1000)
     const weekEndTs = Math.floor(week.end.getTime() / 1000)
+    const graceEndTs = weekEndTs + SETTLEMENT_GRACE_SEC
+    const rates = [...new Set([...PRESET_SETTLEMENT_RATES, ...extraRates.filter((r) => r > 0)])]
 
     let best: SettlementTransfer | null = null
     let bestRate = 0
@@ -224,10 +315,10 @@ export function matchVerifiedWeeklySettlements(
     for (const t of eligible) {
       if (usedTx.has(t.txHash)) continue
       if (t.timestamp < weekStartTs) continue
+      if (t.timestamp > graceEndTs) continue
+      if (!transferMatchesWeek(week, t, rates)) continue
 
-      const check = paymentMatchesWeekEnergy(week.totalKWh, t.wonAmount, extraRates)
-      if (!check.matched) continue
-
+      const check = paymentMatchesWeekEnergy(week.totalKWh, t.wonAmount, rates)
       const score = Math.abs(t.timestamp - weekEndTs)
       if (score < bestScore) {
         bestScore = score

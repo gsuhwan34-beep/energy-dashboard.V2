@@ -76,7 +76,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
   // settlements는 useConsumerSettlements(계량 지갑) API 결과 — payerWallets는 조회용
   const { data: settlementData, refetch: refetchSettlements } = useConsumerSettlements(
     payerWallets,
-    isCustomMode && confirmedP2pWallet ? confirmedP2pWallet : undefined,
+    isCustomMode && confirmedP2pWallet ? confirmedP2pWallet : supplier.wallet,
   )
 
   const fetchSupplierPrice = useCallback(async (walletAddress: string) => {
