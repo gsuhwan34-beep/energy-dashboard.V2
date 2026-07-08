@@ -98,6 +98,7 @@ export interface SettlementTransfer {
   wonAmount: number
   /** P2P 원장 purchaseEnergy 시 판매 Wh (주차 매칭용) */
   soldWh?: number
+  source?: 'ledger' | 'transfer'
 }
 
 export interface SettlementResponse {
@@ -105,8 +106,17 @@ export interface SettlementResponse {
   transfers: SettlementTransfer[]
 }
 
-// 구매자(계량기/결제) 지갑 기준 정산 조회 — 선택한 공급자 탭과 무관
-export function useConsumerSettlements(payerWallets: string[], supplierWallet?: string) {
+export interface ConsumerSettlementsOptions {
+  /** true면 EnergySold 원장만 조회 (주간 정산 UI) */
+  ledgerOnly?: boolean
+}
+
+// 구매자 지갑 기준 정산 조회 — ledgerOnly 시 공급자 탭과 무관
+export function useConsumerSettlements(
+  payerWallets: string[],
+  options: ConsumerSettlementsOptions = {},
+) {
+  const { ledgerOnly = false } = options
   const [data, setData] = useState<SettlementResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -116,19 +126,15 @@ export function useConsumerSettlements(payerWallets: string[], supplierWallet?: 
     .sort()
     .join(',')
 
-  const supplierKey = supplierWallet && /^0x[a-fA-F0-9]{40}$/.test(supplierWallet)
-    ? supplierWallet.toLowerCase()
-    : ''
-
   const refetch = useCallback(async () => {
     const wallets = walletKey.split(',').filter(Boolean)
     if (!wallets.length) return
-    const supplierQuery = supplierKey ? `&supplier=${supplierKey}` : ''
+    const ledgerQuery = ledgerOnly ? '&ledgerOnly=1' : ''
     try {
       setLoading(true)
       const results = await Promise.all(
         wallets.map(async (wallet) => {
-          const res = await fetch(api(`energy/settlements?consumer=${wallet}${supplierQuery}`))
+          const res = await fetch(api(`energy/settlements?consumer=${wallet}${ledgerQuery}`))
           if (!res.ok) return [] as SettlementTransfer[]
           const json = await res.json()
           return (json.transfers ?? []) as SettlementTransfer[]
@@ -147,7 +153,7 @@ export function useConsumerSettlements(payerWallets: string[], supplierWallet?: 
     } finally {
       setLoading(false)
     }
-  }, [walletKey, supplierKey])
+  }, [walletKey, ledgerOnly])
 
   useEffect(() => {
     refetch()

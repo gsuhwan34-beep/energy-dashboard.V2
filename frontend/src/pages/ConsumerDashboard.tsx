@@ -76,7 +76,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
   // settlements는 useConsumerSettlements(계량 지갑) API 결과 — payerWallets는 조회용
   const { data: settlementData, refetch: refetchSettlements } = useConsumerSettlements(
     payerWallets,
-    isCustomMode && confirmedP2pWallet ? confirmedP2pWallet : supplier.wallet,
+    { ledgerOnly: true },
   )
 
   const fetchSupplierPrice = useCallback(async (walletAddress: string) => {
@@ -169,7 +169,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
   }
 
   const handleSettleTransfer = useCallback(
-    async (totalWh: number, amountKwh: number, supplierWallet: string, rate: number) => {
+    async (totalWh: number, _amountKwh: number, supplierWallet: string, _rate: number) => {
       if (isCustomMode) {
         if (!confirmedP2pWallet) {
           throw new Error('P2P 생산자 지갑을 입력하고 「설정」을 눌러 주세요.')
@@ -184,10 +184,19 @@ export default function ConsumerDashboard({ wallet }: Props) {
             )
           }
         }
-        // WON approve + 원장 purchaseEnergy → totalSoldWh·EnergySold 온체인 기록
-        return wallet.purchaseProducerEnergy(totalWh, supplierWallet)
+      } else {
+        const priceRes = await fetch(api(`supplier/price/${supplierWallet}`))
+        if (priceRes.ok) {
+          const priceData = await priceRes.json()
+          const onChain = Number(priceData.onChainRate)
+          if (onChain <= 0) {
+            throw new Error(
+              '공급자 단가가 P2P 원장에 등록되지 않았습니다. 컨트랙트 owner가 setRateFor로 단가를 설정해야 합니다.',
+            )
+          }
+        }
       }
-      return wallet.transferWon(amountKwh, supplierWallet, rate)
+      return wallet.purchaseProducerEnergy(totalWh, supplierWallet)
     },
     [isCustomMode, confirmedP2pWallet, wallet],
   )
@@ -350,8 +359,6 @@ export default function ConsumerDashboard({ wallet }: Props) {
               settlements={settlementData?.transfers ?? []}
               isWalletConnected={wallet.isConnected && wallet.isCorrectNetwork}
               supplier={supplier}
-              payerWallets={payerWallets}
-              connectedWallet={wallet.address}
               settlementReady={!isCustomMode || Boolean(confirmedP2pWallet)}
               settlementBlockedHint="P2P 생산자 지갑을 입력하고 「설정」을 눌러 주세요."
               onTransfer={handleSettleTransfer}

@@ -173,6 +173,70 @@ export interface WeekSettlementMatch {
   txHash: string
   wonAmount: number
   to: string
+  soldWh?: number
+}
+
+function ledgerPurchaseMatchesWeek(
+  week: Pick<WeekRow, 'totalWh' | 'totalKWh'>,
+  purchase: SettlementTransfer,
+): boolean {
+  if (week.totalWh <= 0) return false
+  if (purchase.soldWh == null || purchase.soldWh <= 0) return false
+  return whAmountsMatch(week.totalWh, purchase.soldWh)
+}
+
+function ledgerWhMatchScore(weekWh: number, soldWh: number): number {
+  if (weekWh <= 0 || soldWh <= 0) return Infinity
+  return Math.abs(weekWh - soldWh) / Math.max(weekWh, 1)
+}
+
+/**
+ * 주간 정산 UI — P2P 원장 EnergySold만 인정.
+ * 공급자 탭과 무관하게 soldWh ↔ 주차 계량 Wh가 맞으면 정산됨.
+ * (배포 전 WON 직접 송금은 원장에 없으므로 정산하기로 표시)
+ */
+export function matchLedgerPurchasesToWeekRows(
+  weeks: WeekRow[],
+  purchases: SettlementTransfer[],
+): Record<number, WeekSettlementMatch> {
+  const matched: Record<number, WeekSettlementMatch> = {}
+  const eligible = purchases.filter((p) => p.soldWh != null && p.soldWh > 0)
+  if (!eligible.length) return matched
+
+  const weekList = weeks
+    .filter((w) => !w.isCurrent && w.totalWh > 0)
+    .sort((a, b) => a.weekIndex - b.weekIndex)
+
+  const pairs: { week: WeekRow; p: SettlementTransfer; score: number }[] = []
+
+  for (const week of weekList) {
+    const weekEndTs = Math.floor(week.end.getTime() / 1000)
+    for (const p of eligible) {
+      if (!ledgerPurchaseMatchesWeek(week, p)) continue
+      const whScore = ledgerWhMatchScore(week.totalWh, p.soldWh!)
+      const timeScore = Math.abs(p.timestamp - weekEndTs) / SETTLEMENT_GRACE_SEC
+      pairs.push({ week, p, score: whScore * 100 + timeScore })
+    }
+  }
+
+  pairs.sort((a, b) => a.score - b.score)
+
+  const usedTx = new Set<string>()
+  const usedWeek = new Set<number>()
+
+  for (const { week, p } of pairs) {
+    if (usedTx.has(p.txHash) || usedWeek.has(week.weekIndex)) continue
+    matched[week.weekIndex] = {
+      txHash: p.txHash,
+      wonAmount: p.wonAmount,
+      to: p.to,
+      soldWh: p.soldWh,
+    }
+    usedTx.add(p.txHash)
+    usedWeek.add(week.weekIndex)
+  }
+
+  return matched
 }
 
 function amountMatchScore(weekKWh: number, wonAmount: number, extraRates: number[]): number {
@@ -214,10 +278,7 @@ function transferMatchesWeek(
   return false
 }
 
-/**
- * 주간 정산 UI — 온체인 송금을 주차별로 매칭.
- * 금액(또는 soldWh)이 맞는 쌍 중 시각이 가장 가까운 것을 우선 배정 (한 tx ↔ 한 주).
- */
+/** @deprecated WON 송금 매칭 — 주간 UI는 matchLedgerPurchasesToWeekRows 사용 */
 export function matchSettlementsToWeekRows(
   weeks: WeekRow[],
   transfers: SettlementTransfer[],
@@ -307,66 +368,37 @@ export function buildWeekRowsFromReadings(readings: EnergyReading[]): WeekRow[] 
     .sort((a, b) => a.weekIndex - b.weekIndex)
 }
 
-/** 소비자 탭 주차별 정산과 동일한 매칭 — 검증된 주차 정산만 반환 */
+/** 프레젠테이션 등 — 원장 EnergySold 기준 검증된 주차 정산 */
 export function matchVerifiedWeeklySettlements(
   readings: EnergyReading[],
   transfers: SettlementTransfer[],
-  payerWallets: string[],
-  extraRates: number[] = [],
+  _payerWallets: string[],
+  _extraRates: number[] = [],
 ): VerifiedWeeklySettlement[] {
-  const validPayers = payerWallets.filter((w) => /^0x[a-fA-F0-9]{40}$/.test(w))
-  if (!validPayers.length && !transfers.length) return []
-
-  // API가 계량 kWh 기준으로 검증한 송금 포함 — from 지갑과 계량 지갑이 달라도 매칭
-  const eligible = transfers
-
   const weeks = buildWeekRowsFromReadings(readings)
-    .filter((w) => !w.isCurrent && w.totalKWh > 0)
-    .sort((a, b) => a.weekIndex - b.weekIndex)
+  const matched = matchLedgerPurchasesToWeekRows(weeks, transfers)
 
-  const usedTx = new Set<string>()
-  const results: VerifiedWeeklySettlement[] = []
-
-  for (const week of weeks) {
-    const weekStartTs = Math.floor(week.start.getTime() / 1000)
-    const weekEndTs = Math.floor(week.end.getTime() / 1000)
-    const rates = [...new Set([...PRESET_SETTLEMENT_RATES, ...extraRates.filter((r) => r > 0)])]
-
-    let best: SettlementTransfer | null = null
-    let bestRate = 0
-    let bestScore = Infinity
-
-    for (const t of eligible) {
-      if (usedTx.has(t.txHash)) continue
-      if (t.timestamp < weekStartTs) continue
-      if (!transferMatchesWeek(week, t, rates)) continue
-
-      const check = paymentMatchesWeekEnergy(week.totalKWh, t.wonAmount, rates)
-      const score = Math.abs(t.timestamp - weekEndTs)
-      if (score < bestScore) {
-        bestScore = score
-        best = t
-        bestRate = check.rate
-      }
-    }
-
-    if (best) {
-      results.push({
-        weekIndex: week.weekIndex,
+  return Object.entries(matched)
+    .map(([idxStr, m]) => {
+      const weekIndex = Number(idxStr)
+      const week = weeks.find((w) => w.weekIndex === weekIndex)
+      if (!week) return null
+      const purchase = transfers.find((t) => t.txHash === m.txHash)
+      const rate = week.totalKWh > 0 ? m.wonAmount / week.totalKWh : 0
+      return {
+        weekIndex,
         weekLabel: week.weekLabel,
         kWh: week.totalKWh,
         wh: week.totalWh,
-        wonAmount: best.wonAmount,
-        ratePerKwh: bestRate,
-        txHash: best.txHash,
-        timestamp: best.timestamp,
-        supplierWallet: best.to,
-      })
-      usedTx.add(best.txHash)
-    }
-  }
-
-  return results.sort((a, b) => b.timestamp - a.timestamp)
+        wonAmount: m.wonAmount,
+        ratePerKwh: Number(rate.toFixed(2)),
+        txHash: m.txHash,
+        timestamp: purchase?.timestamp ?? 0,
+        supplierWallet: m.to,
+      }
+    })
+    .filter((r): r is VerifiedWeeklySettlement => r != null)
+    .sort((a, b) => b.timestamp - a.timestamp)
 }
 
 export function getCalendarWeekDays(anchor: Date): Date[] {

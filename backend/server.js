@@ -433,6 +433,18 @@ app.get('/api/energy/settlements', async (req, res) => {
   try {
     const supplierParam = req.query.supplier;
     const consumerParam = req.query.consumer;
+    const ledgerOnly = req.query.ledgerOnly === '1';
+
+    // 주간 정산 UI — P2P 원장 EnergySold만 (배포 전 WON 송금 제외)
+    if (ledgerOnly && isValidAddress(consumerParam)) {
+      const consumer = ethers.getAddress(consumerParam);
+      const ledgerPurchases = await fetchLedgerPurchasesByBuyer(consumer);
+      ledgerPurchases.sort((a, b) => a.timestamp - b.timestamp);
+      return res.json({
+        wonToken: WON_ADDRESS,
+        transfers: ledgerPurchases,
+      });
+    }
 
     let allTransfers = [];
     const seenTx = new Set();

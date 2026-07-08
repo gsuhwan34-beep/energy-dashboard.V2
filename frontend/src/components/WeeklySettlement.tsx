@@ -6,7 +6,7 @@ import {
   getSettlementMonthWeekRange,
   buildEpochWeekRows,
   getWeekIndex,
-  matchSettlementsToWeekRows,
+  matchLedgerPurchasesToWeekRows,
 } from '../lib/settlementMatch'
 import {
   Calendar, Coins, CheckCircle2, Loader2,
@@ -31,13 +31,21 @@ interface Props {
   settlements: SettlementTransfer[]
   isWalletConnected: boolean
   supplier: EnergySupplier
-  consumerWallet?: string
-  onTransfer: (amountKwh: number, supplierWallet: string, rate: number) => Promise<string>
+  settlementReady?: boolean
+  settlementBlockedHint?: string
+  onTransfer: (totalWh: number, amountKwh: number, supplierWallet: string, rate: number) => Promise<string>
   onSettlementDone: () => void
 }
 
 export default function WeeklySettlement({
-  readings, settlements, isWalletConnected, supplier, onTransfer, onSettlementDone,
+  readings,
+  settlements,
+  isWalletConnected,
+  supplier,
+  settlementReady = true,
+  settlementBlockedHint,
+  onTransfer,
+  onSettlementDone,
 }: Props) {
   const [justSettled, setJustSettled] = useState<Record<number, string>>({})
   const [settling, setSettling] = useState<number | null>(null)
@@ -76,7 +84,7 @@ export default function WeeklySettlement({
   }, [selectedMonth, readings, readingsByWeek, supplier.rate])
 
   const onchainSettled = useMemo(
-    () => matchSettlementsToWeekRows(
+    () => matchLedgerPurchasesToWeekRows(
       weeks.map(({ weekIndex, weekLabel, start, end, totalWh, totalKWh, isCurrent, isEmpty }) => ({
         weekIndex,
         weekLabel,
@@ -88,18 +96,16 @@ export default function WeeklySettlement({
         isEmpty,
       })),
       settlements,
-      supplier.wallet,
-      [supplier.rate],
     ),
-    [weeks, settlements, supplier.wallet, supplier.rate],
+    [weeks, settlements],
   )
 
   async function handleSettle(week: WeekRow) {
-    if (!isWalletConnected || settling !== null) return
+    if (!isWalletConnected || settling !== null || !settlementReady) return
     setSettling(week.weekIndex)
     setError(null)
     try {
-      const txHash = await onTransfer(week.totalKWh, supplier.wallet, supplier.rate)
+      const txHash = await onTransfer(week.totalWh, week.totalKWh, supplier.wallet, supplier.rate)
       setJustSettled(prev => ({ ...prev, [week.weekIndex]: txHash }))
       onSettlementDone()
     } catch (err: any) {
@@ -119,16 +125,14 @@ export default function WeeklySettlement({
 
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque overflow-hidden">
-      {/* 헤더 */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border-base">
         <Coins className="w-4 h-4 text-brand-100" />
         <h3 className="text-sm font-semibold text-fg-base">주간 정산</h3>
         <span className="ml-auto text-[10px] text-fg-muted">
-          {supplier.emoji} {supplier.label} · {supplier.rate} WON/kWh · 온체인 검증
+          {supplier.emoji} {supplier.label} · {supplier.rate} WON/kWh · P2P 원장 EnergySold
         </span>
       </div>
 
-      {/* 월 선택 */}
       <div className="flex items-center justify-center gap-3 px-4 py-2.5 border-b border-border-base bg-bg-subtle/50">
         <button onClick={() => goMonth(-1)} disabled={selectedMonthIdx <= 0}
           className="p-1 rounded hover:bg-bg-subtle disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
@@ -156,7 +160,12 @@ export default function WeeklySettlement({
         </div>
       )}
 
-      {/* 주차별 목록 */}
+      {!settlementReady && settlementBlockedHint && (
+        <div className="mx-4 mt-3 p-2.5 rounded-lg border border-tag-orange-100/30 bg-tag-orange-10 flex items-center gap-2 text-xs text-tag-orange-100">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />{settlementBlockedHint}
+        </div>
+      )}
+
       <div className="divide-y divide-border-base">
         {weeks.map((week) => {
           const chainMatch = onchainSettled[week.weekIndex]
@@ -203,9 +212,9 @@ export default function WeeklySettlement({
                   </button>
                 ) : (
                   <button onClick={() => handleSettle(week)}
-                    disabled={!isWalletConnected || isSettling}
+                    disabled={!isWalletConnected || isSettling || !settlementReady}
                     className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg transition-all ${
-                      !isWalletConnected ? 'bg-bg-subtle text-fg-disabled cursor-not-allowed'
+                      !isWalletConnected || !settlementReady ? 'bg-bg-subtle text-fg-disabled cursor-not-allowed'
                       : isSettling ? 'bg-brand-30 text-white cursor-wait'
                       : 'bg-brand-100 text-white hover:opacity-90'
                     }`}>

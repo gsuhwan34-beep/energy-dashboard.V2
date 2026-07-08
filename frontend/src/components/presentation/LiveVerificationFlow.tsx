@@ -4,7 +4,7 @@ import {
   ExternalLink, Zap, Loader2,
 } from 'lucide-react'
 import { useEnergyData, useConsumerSettlements } from '../../hooks/useEnergyData'
-import { readStoredWallet, readStoredSupplierRate, STORAGE_CONSUMER_WALLET, DEMO_CONSUMER_WALLET, shortAddr } from '../../lib/presentation'
+import { readStoredWallet, readStoredSupplierRate, STORAGE_CONSUMER_WALLET, DEMO_CONSUMER_WALLET, shortAddr, resolvePayerWallets } from '../../lib/presentation'
 import { matchVerifiedWeeklySettlements } from '../../lib/settlementMatch'
 
 const STEPS = [
@@ -66,7 +66,8 @@ export default function LiveVerificationFlow() {
 
   const { data, loading } = useEnergyData(consumerWallet)
   const { data: settlementData } = useConsumerSettlements(
-    /^0x[a-fA-F0-9]{40}$/.test(consumerWallet) ? [consumerWallet] : [],
+    resolvePayerWallets(consumerWallet),
+    { ledgerOnly: true },
   )
 
   const readings = data?.readings ?? []
