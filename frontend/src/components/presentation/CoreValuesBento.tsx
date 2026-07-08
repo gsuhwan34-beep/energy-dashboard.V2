@@ -104,7 +104,7 @@ function DetailModal({
   const Icon = tab.icon as LucideIcon
   const accent = ACCENT_STYLES[tab.accent]
   const isReport = depth === 'report'
-  const hasModalPhoto = Boolean(tab.modalPhoto)
+  const hasModalPhoto = Boolean(tab.modalPhoto || tab.modalSecondaryPhoto || tab.detailPhoto)
 
   const handleClose = () => {
     setDepth('summary')

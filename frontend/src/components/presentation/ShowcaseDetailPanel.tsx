@@ -53,46 +53,63 @@ interface SummaryProps {
   onOpenReport: () => void
 }
 
+function ModalPhotoFigure({
+  src,
+  caption,
+  maxHeightClass = 'max-h-[min(240px,32vh)]',
+}: {
+  src: string
+  caption?: string
+  maxHeightClass?: string
+}) {
+  return (
+    <figure className="flex flex-col items-center justify-center min-h-0 h-full gap-1.5 overflow-hidden">
+      <div className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
+        <img
+          src={src}
+          alt={caption ?? ''}
+          className={`block max-w-full ${maxHeightClass} w-auto h-auto object-contain rounded-lg shadow-sm`}
+        />
+      </div>
+      {caption && (
+        <figcaption className="text-[9px] text-slate-500 text-center leading-tight px-1">{caption}</figcaption>
+      )}
+    </figure>
+  )
+}
+
 export function ShowcaseSummaryPanel({ tab, onOpenReport }: SummaryProps) {
   const accent = ACCENT_STYLES[tab.accent]
+  const hasModalHeader = Boolean(tab.modalPhoto || tab.modalSecondaryPhoto)
 
   return (
-    <div className="flex flex-col h-full min-h-0 gap-3">
-      {tab.modalPhoto && (
-        <div className="shrink-0 min-h-[min(280px,36vh)] max-h-[min(360px,42vh)] flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-3 mb-1 overflow-hidden">
-          {tab.secondaryPhoto ? (
+    <div className="flex flex-col h-full min-h-0 gap-3 overflow-y-auto">
+      {hasModalHeader && (
+        <div className="shrink-0 min-h-[min(220px,32vh)] max-h-[min(320px,38vh)] flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-3 overflow-hidden">
+          {tab.modalSecondaryPhoto && tab.modalPhoto ? (
             <div className="w-full h-full grid grid-cols-2 gap-3 items-center min-h-0 overflow-hidden">
-              <figure className="flex flex-col items-center justify-center min-h-0 h-full gap-1.5 overflow-hidden">
-                <div className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
-                  <img
-                    src={tab.heroImage ?? tab.modalPhoto}
-                    alt={tab.imageCaption}
-                    className="block max-w-full max-h-[min(240px,32vh)] w-auto h-auto object-contain rounded-lg shadow-sm"
-                  />
-                </div>
-                <figcaption className="text-[9px] text-slate-500 text-center leading-tight px-1">
-                  {tab.imageCaption}
-                </figcaption>
-              </figure>
-              <figure className="flex flex-col items-center justify-center min-h-0 h-full gap-1.5 overflow-hidden">
-                <div className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
-                  <img
-                    src={tab.modalPhoto}
-                    alt={tab.secondaryImageCaption ?? tab.imageCaption}
-                    className="block max-w-full max-h-[min(240px,32vh)] w-auto h-auto object-contain rounded-lg shadow-sm"
-                  />
-                </div>
-                <figcaption className="text-[9px] text-slate-500 text-center leading-tight px-1">
-                  {tab.modalPhotoCaption ?? tab.secondaryImageCaption}
-                </figcaption>
-              </figure>
+              <ModalPhotoFigure src={tab.modalSecondaryPhoto} caption={tab.modalSecondaryPhotoCaption} />
+              <ModalPhotoFigure src={tab.modalPhoto} caption={tab.modalPhotoCaption} />
             </div>
-          ) : (
+          ) : tab.modalPhoto ? (
+            <ModalPhotoFigure src={tab.modalPhoto} caption={tab.modalPhotoCaption} maxHeightClass="max-h-full" />
+          ) : tab.modalSecondaryPhoto ? (
+            <ModalPhotoFigure src={tab.modalSecondaryPhoto} caption={tab.modalSecondaryPhotoCaption} maxHeightClass="max-h-full" />
+          ) : null}
+        </div>
+      )}
+
+      {tab.detailPhoto && (
+        <div className="shrink-0 rounded-xl bg-slate-100 border border-indigo-100 p-3 overflow-hidden">
+          <div className="w-full flex items-center justify-center overflow-hidden max-h-[min(220px,30vh)]">
             <img
-              src={tab.modalPhoto}
-              alt={tab.imageCaption}
-              className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-sm"
+              src={tab.detailPhoto}
+              alt={tab.detailPhotoCaption ?? tab.detailTitle}
+              className="block max-w-full max-h-[min(220px,30vh)] w-auto h-auto object-contain rounded-lg shadow-sm"
             />
+          </div>
+          {tab.detailPhotoCaption && (
+            <p className="text-[9px] text-slate-500 text-center leading-tight px-1 mt-2">{tab.detailPhotoCaption}</p>
           )}
         </div>
       )}
