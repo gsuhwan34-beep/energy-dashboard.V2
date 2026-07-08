@@ -386,12 +386,12 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
       'BIS 「통합원장」 창시자 신현송 총재 취임 이후 가속화되는 「프로젝트 한강」·「프로젝트 아고라」와 연동 가능한 에너지 엣지 정산 인프라입니다.',
     imageCaption: '2026 7월 ECB 포럼: 신현송 한은 총재 토큰화 발언',
     heroImage: '/presentation/bok-shin-ecb-speaking.png',
-    modalSecondaryPhoto: '/presentation/bok-governor-slide.png',
-    modalSecondaryPhotoCaption: '이창용 전 총재 · 원화 스테이블코인 국회 발언 (2025.8.19)',
+    secondaryPhoto: '/presentation/bok-governor-slide.png',
+    secondaryImageCaption: '이창용 전 총재 · 원화 스테이블코인 국회 발언 (2025.8.19)',
+    modalSecondaryPhoto: '/presentation/bok-shin-ecb-forum.png',
+    modalSecondaryPhotoCaption: '2026년 7월 ECB 포럼 : 신현송 총재 토큰화 발표',
     modalPhoto: '/presentation/bok-governor-news.png',
     modalPhotoCaption: '이창용 전 총재 · 디지털 화폐·스테이블코인 관련 보도 (2025)',
-    detailPhoto: '/presentation/bok-shin-ecb-forum.png',
-    detailPhotoCaption: '2026년 7월 ECB 포럼 : 신현송 총재 토큰화 발표',
     detailTitle: '통합원장 생태계와 에너지 엣지 정산 (CBDC Network)',
     summaryBullets: [
       {
