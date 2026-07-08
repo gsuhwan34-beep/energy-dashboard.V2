@@ -120,7 +120,42 @@ async function fetchProducerProductions(producer) {
   return { productions, meterTotalWh };
 }
 
-/** P2P 원장 purchaseEnergy → EnergySold (정산 조회용) */
+/** P2P 원장 purchaseEnergy → EnergySold (구매자 기준 — 생산자 탭과 무관하게 조회) */
+async function fetchLedgerPurchasesByBuyer(buyerFilter) {
+  try {
+    const buyer = ethers.getAddress(buyerFilter);
+    const filter = producerLedgerContract.filters.EnergySold(null, buyer);
+    const logs = await producerLedgerContract.queryFilter(filter, START_BLOCK, 'latest');
+
+    const transfers = [];
+    for (const log of logs) {
+      const producer = ethers.getAddress(log.args.producer ?? log.args[0]);
+      const soldWh = Number(log.args.soldWh ?? log.args[2]);
+      const wonPaid = Number(ethers.formatUnits(log.args.wonPaid ?? log.args[4], 18));
+      let timestamp = Number(log.args.timestamp ?? log.args[5]);
+      if (!timestamp) timestamp = await getBlockTimestamp(log.blockNumber);
+
+      transfers.push({
+        txHash: log.transactionHash,
+        blockNumber: log.blockNumber,
+        timestamp,
+        from: buyer,
+        to: producer,
+        wonAmount: wonPaid,
+        soldWh,
+        source: 'ledger',
+      });
+    }
+
+    transfers.sort((a, b) => a.timestamp - b.timestamp);
+    return transfers;
+  } catch (err) {
+    console.warn('Ledger buyer purchases skipped:', err.message);
+    return [];
+  }
+}
+
+/** @deprecated producer 필터 — fetchLedgerPurchasesByBuyer 사용 권장 */
 async function fetchLedgerPurchaseTransfers(producer, buyerFilter) {
   try {
     const producerAddr = ethers.getAddress(producer);
@@ -480,14 +515,15 @@ app.get('/api/energy/settlements', async (req, res) => {
         }
       }
 
-      // P2P 원장 EnergySold — WON Transfer와 별도로 purchaseEnergy tx 직접 인식
-      if (isValidAddress(supplierParam)) {
-        const ledgerPurchases = await fetchLedgerPurchaseTransfers(supplierParam, consumer);
-        for (const t of ledgerPurchases) {
-          if (seenTx.has(t.txHash)) continue;
-          seenTx.add(t.txHash);
-          allTransfers.push(t);
+      // P2P 원장 EnergySold — 구매자 기준 (MetaMask 지갑 ≠ 계량기 지갑도 포함)
+      const ledgerPurchases = await fetchLedgerPurchasesByBuyer(consumer);
+      for (const t of ledgerPurchases) {
+        if (isValidAddress(supplierParam) && t.to.toLowerCase() !== supplierParam.toLowerCase()) {
+          continue;
         }
+        if (seenTx.has(t.txHash)) continue;
+        seenTx.add(t.txHash);
+        allTransfers.push(t);
       }
     } else {
       const suppliers = isValidAddress(supplierParam)
