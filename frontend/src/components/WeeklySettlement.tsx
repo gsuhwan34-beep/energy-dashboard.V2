@@ -1,9 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { EnergyReading, SettlementTransfer } from '../hooks/useEnergyData'
 import type { EnergySupplier } from '../hooks/useWallet'
-import { PRESET_SETTLEMENT_RATES } from '../hooks/useWallet'
-import { writeStoredWallet, STORAGE_PAYER_WALLET } from '../lib/presentation'
-import OnChainExplainer from './OnChainExplainer'
 import {
   Calendar, Coins, CheckCircle2, Loader2,
   AlertCircle, ChevronLeft, ChevronRight, Clock,
@@ -27,16 +24,8 @@ interface Props {
   settlements: SettlementTransfer[]
   isWalletConnected: boolean
   supplier: EnergySupplier
-  payerWallets?: string[]
-  connectedWallet?: string | null
-  settlementReady?: boolean
-  settlementBlockedHint?: string
-  onTransfer: (
-    totalWh: number,
-    amountKwh: number,
-    supplierWallet: string,
-    rate: number,
-  ) => Promise<string>
+  consumerWallet?: string
+  onTransfer: (amountKwh: number, supplierWallet: string, rate: number) => Promise<string>
   onSettlementDone: () => void
 }
 
@@ -94,7 +83,9 @@ function getAvailableMonths(readings: EnergyReading[]): { year: number; month: n
 
 /**
  * 온체인 WON 전송 기록을 주차별로 매칭.
- * 공급자 탭과 무관 — 구매자 지갑 + kWh 기반 금액으로 판별.
+ * - 공급자(to), 구매자(from) 주소 일치
+ * - 금액이 해당 주차 요금과 근사하게 일치
+ * - 전송 시각이 해당 주차 시작 이후
  */
 function amountsMatch(expected: number, actual: number): boolean {
   if (expected <= 0) return actual <= 0.01
@@ -102,43 +93,23 @@ function amountsMatch(expected: number, actual: number): boolean {
   return diff <= Math.max(0.01, expected * 0.05)
 }
 
-function paymentMatchesWeekEnergy(
-  week: WeekRow,
-  transfer: SettlementTransfer,
-  extraRates: number[],
-): boolean {
-  if (week.isEmpty && week.totalKWh <= 0) return transfer.wonAmount <= 0.01
-  if (week.totalKWh <= 0) return false
-
-  // P2P 원장 EnergySold — Wh 기준 매칭 (단가·반올림 차이 무시)
-  if (transfer.soldWh != null && transfer.soldWh > 0 && week.totalWh > 0) {
-    const whDiff = Math.abs(transfer.soldWh - week.totalWh)
-    if (whDiff <= Math.max(1, week.totalWh * 0.08)) return true
-  }
-
-  const rates = [...new Set([...PRESET_SETTLEMENT_RATES, ...extraRates.filter(r => r > 0)])]
-  for (const rate of rates) {
-    if (amountsMatch(week.totalKWh * rate, transfer.wonAmount)) return true
-  }
-
-  const impliedRate = transfer.wonAmount / week.totalKWh
-  if (impliedRate >= 10 && impliedRate <= 500) {
-    return amountsMatch(week.totalKWh * impliedRate, transfer.wonAmount)
-  }
-  return false
-}
-
 function matchSettlementsToWeeks(
   weeks: WeekRow[],
   settlements: SettlementTransfer[],
-  payerWallets: string[],
-  extraRates: number[],
+  supplierWallet: string,
+  consumerWallet?: string,
 ): Record<number, { txHash: string; wonAmount: number; to: string }> {
   const matched: Record<number, { txHash: string; wonAmount: number; to: string }> = {}
-  if (!settlements.length) return matched
+  if (!settlements.length || !/^0x[a-fA-F0-9]{40}$/.test(supplierWallet)) return matched
 
-  // API가 계량 kWh 기준 검증한 송금 포함 — MetaMask 미연결 시에도 정산됨 표시
-  const eligible = settlements
+  const supplierLower = supplierWallet.toLowerCase()
+  const consumerLower = consumerWallet?.toLowerCase()
+
+  const eligible = settlements.filter((s) => {
+    if (s.to.toLowerCase() !== supplierLower) return false
+    if (consumerLower && s.from.toLowerCase() !== consumerLower) return false
+    return true
+  })
 
   const weeksSorted = [...weeks]
     .filter(w => !w.isCurrent)
@@ -158,7 +129,7 @@ function matchSettlementsToWeeks(
     for (const s of eligible) {
       if (usedTx.has(s.txHash)) continue
       if (s.timestamp < weekStartTs) continue
-      if (!paymentMatchesWeekEnergy(week, s, extraRates)) continue
+      if (!amountsMatch(week.wonAmount, s.wonAmount)) continue
 
       const score = Math.abs(s.timestamp - weekEndTs)
       if (score < bestScore) {
@@ -181,9 +152,7 @@ function matchSettlementsToWeeks(
 }
 
 export default function WeeklySettlement({
-  readings, settlements, isWalletConnected, supplier, payerWallets = [], connectedWallet,
-  settlementReady = true, settlementBlockedHint,
-  onTransfer, onSettlementDone,
+  readings, settlements, isWalletConnected, supplier, consumerWallet, onTransfer, onSettlementDone,
 }: Props) {
   const [justSettled, setJustSettled] = useState<Record<number, string>>({})
   const [settling, setSettling] = useState<number | null>(null)
@@ -232,17 +201,16 @@ export default function WeeklySettlement({
   }, [selectedMonth, readingsByWeek, currentWeekIndex, supplier.rate])
 
   const onchainSettled = useMemo(
-    () => matchSettlementsToWeeks(weeks, settlements, payerWallets, [supplier.rate]),
-    [weeks, settlements, payerWallets, supplier.rate],
+    () => matchSettlementsToWeeks(weeks, settlements, supplier.wallet, consumerWallet),
+    [weeks, settlements, supplier.wallet, consumerWallet],
   )
 
   async function handleSettle(week: WeekRow) {
-    if (!isWalletConnected || settling !== null || !settlementReady) return
+    if (!isWalletConnected || settling !== null) return
     setSettling(week.weekIndex)
     setError(null)
     try {
-      const txHash = await onTransfer(week.totalWh, week.totalKWh, supplier.wallet, supplier.rate)
-      if (connectedWallet) writeStoredWallet(STORAGE_PAYER_WALLET, connectedWallet)
+      const txHash = await onTransfer(week.totalKWh, supplier.wallet, supplier.rate)
       setJustSettled(prev => ({ ...prev, [week.weekIndex]: txHash }))
       onSettlementDone()
     } catch (err: any) {
@@ -263,15 +231,12 @@ export default function WeeklySettlement({
   return (
     <div className="border border-border-strong rounded-lg bg-bg-base-opaque overflow-hidden">
       {/* 헤더 */}
-      <div className="flex flex-col gap-2 px-4 py-3 border-b border-border-base">
-        <div className="flex items-center gap-2">
-          <Coins className="w-4 h-4 text-brand-100" />
-          <h3 className="text-sm font-semibold text-fg-base">주간 정산</h3>
-          <span className="ml-auto text-[10px] text-fg-muted">
-            {supplier.emoji} {supplier.label} · {supplier.rate} WON/kWh · 온체인 검증
-          </span>
-        </div>
-        <OnChainExplainer variant="light" compact />
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-base">
+        <Coins className="w-4 h-4 text-brand-100" />
+        <h3 className="text-sm font-semibold text-fg-base">주간 정산</h3>
+        <span className="ml-auto text-[10px] text-fg-muted">
+          {supplier.emoji} {supplier.label} · {supplier.rate} WON/kWh · 온체인 검증
+        </span>
       </div>
 
       {/* 월 선택 */}
@@ -298,14 +263,7 @@ export default function WeeklySettlement({
       {!isWalletConnected && (
         <div className="mx-4 mt-3 p-2.5 rounded-lg border border-tag-blue-100/30 bg-tag-blue-10 flex items-center gap-2 text-xs text-tag-blue-100">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          정산을 위해 먼저 MetaMask 지갑을 연결해 주세요.
-        </div>
-      )}
-
-      {isWalletConnected && !settlementReady && settlementBlockedHint && (
-        <div className="mx-4 mt-3 p-2.5 rounded-lg border border-tag-orange-100/30 bg-tag-orange-10 flex items-center gap-2 text-xs text-tag-orange-100">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          {settlementBlockedHint}
+          정산을 위해 먼저 지갑을 연결해 주세요.
         </div>
       )}
 
@@ -351,9 +309,9 @@ export default function WeeklySettlement({
                   </div>
                 ) : (
                   <button onClick={() => handleSettle(week)}
-                    disabled={!isWalletConnected || !settlementReady || isSettling}
+                    disabled={!isWalletConnected || isSettling}
                     className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg transition-all ${
-                      !isWalletConnected || !settlementReady ? 'bg-bg-subtle text-fg-disabled cursor-not-allowed'
+                      !isWalletConnected ? 'bg-bg-subtle text-fg-disabled cursor-not-allowed'
                       : isSettling ? 'bg-brand-30 text-white cursor-wait'
                       : 'bg-brand-100 text-white hover:opacity-90'
                     }`}>

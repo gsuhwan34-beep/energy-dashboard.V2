@@ -46,6 +46,7 @@ export default defineConfig(() => {
         'react/jsx-runtime',
         '@tanstack/react-query',
         '@tanstack/query-core',
+        '@walletconnect/ethereum-provider',
       ],
     },
     base,

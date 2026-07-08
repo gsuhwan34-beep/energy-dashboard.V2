@@ -1,6 +1,18 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { BrowserProvider, Contract, MaxUint256, formatUnits, getAddress, parseUnits } from 'ethers'
 import { PRODUCER_LEDGER_ADDRESS, PRODUCER_LEDGER_ABI, LEDGER_ERROR_MESSAGES } from '../lib/producerLedger'
+import {
+  connectInjectedWallet,
+  connectWalletConnect,
+  disconnectActiveWallet,
+  getActiveEip1193Provider,
+  getConnectionMode,
+  hasInjectedWallet,
+  isMobileBrowser,
+  restoreWalletConnectSession,
+  subscribeProvider,
+  type WalletConnectionMode,
+} from '../lib/walletProvider'
 
 // ── 상수 ──
 const ARBITRUM_SEPOLIA_CHAIN_ID = '0x66eee' // 421614 in hex
@@ -14,7 +26,6 @@ const ARBITRUM_SEPOLIA_CONFIG = {
 
 export const PRODUCER_METER_ADDRESS = '0x9F9013b71f59d8ecf4730B4946F988827e3EE2A8'
 
-// WON 토큰 정보
 const WON_TOKEN_ADDRESS = '0x884486C95F186F4Bc37D0cC9CBc23DF88829fdBB'
 const WON_TOKEN_ABI = [
   'function transfer(address to, uint amount) returns (bool)',
@@ -23,35 +34,33 @@ const WON_TOKEN_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
 ]
 
-// ── 에너지 공급자 설정 ──
 export interface EnergySupplier {
   id: 'renewable' | 'mixed' | 'custom'
   label: string
   emoji: string
-  rate: number        // WON per kWh
-  wallet: string      // 정산 수신 지갑
+  rate: number
+  wallet: string
   description: string
 }
 
-/** 프리셋 공급자 단가 — 정산 매칭 시 탭 선택과 무관하게 사용 */
 export const PRESET_SETTLEMENT_RATES = [150, 100] as const
 
 export const SUPPLIERS: Record<string, EnergySupplier> = {
   renewable: {
     id: 'renewable',
-    label: '제주 동복 풍력발전단지', 
+    label: '제주 동복 풍력발전단지',
     emoji: '🍃',
     rate: 150,
     wallet: '0xf7486A72851c1054661e9E6bF96f1ACcb1f7b6F8',
-    description: '제주특별자치도 구좌읍 · 100% 친환경 풍력', 
+    description: '제주특별자치도 구좌읍 · 100% 친환경 풍력',
   },
   mixed: {
     id: 'mixed',
-    label: '국가전력망 일반 혼합전력', 
+    label: '국가전력망 일반 혼합전력',
     emoji: '🏭',
     rate: 100,
     wallet: '0x0C6F6f9FA1BB851AeF9e08c57E4E2a9820858D8e',
-    description: '충남 당진 화력 및 원자력 혼합 발전', 
+    description: '충남 당진 화력 및 원자력 혼합 발전',
   },
 }
 
@@ -61,6 +70,51 @@ export interface WalletState {
   isCorrectNetwork: boolean
   isConnecting: boolean
   error: string | null
+  connectionMode: WalletConnectionMode | null
+  hasInjectedWallet: boolean
+  isMobileBrowser: boolean
+}
+
+type Eip1193Provider = NonNullable<ReturnType<typeof getActiveEip1193Provider>>
+
+async function checkNetwork(provider: Eip1193Provider) {
+  try {
+    const chainId = await provider.request({ method: 'eth_chainId' })
+    return chainId === ARBITRUM_SEPOLIA_CHAIN_ID
+  } catch {
+    return false
+  }
+}
+
+async function ensureArbitrumSepolia(provider: Eip1193Provider) {
+  const isCorrect = await checkNetwork(provider)
+  if (isCorrect) return true
+
+  try {
+    await provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: ARBITRUM_SEPOLIA_CHAIN_ID }],
+    })
+  } catch (switchErr: any) {
+    if (switchErr.code === 4902) {
+      await provider.request({
+        method: 'wallet_addEthereumChain',
+        params: [ARBITRUM_SEPOLIA_CONFIG],
+      })
+    } else {
+      throw switchErr
+    }
+  }
+
+  return checkNetwork(provider)
+}
+
+function requireProvider(): Eip1193Provider {
+  const provider = getActiveEip1193Provider()
+  if (!provider) {
+    throw new Error('지갑이 연결되어 있지 않습니다.')
+  }
+  return provider
 }
 
 export function useWallet() {
@@ -70,130 +124,151 @@ export function useWallet() {
     isCorrectNetwork: false,
     isConnecting: false,
     error: null,
+    connectionMode: null,
+    hasInjectedWallet: hasInjectedWallet(),
+    isMobileBrowser: isMobileBrowser(),
   })
 
-  // 현재 체인 확인
-  const checkNetwork = useCallback(async () => {
-    if (!window.ethereum) return false
-    try {
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' })
-      return chainId === ARBITRUM_SEPOLIA_CHAIN_ID
-    } catch {
-      return false
-    }
+  const unsubscribeRef = useRef<(() => void) | null>(null)
+
+  const bindProviderEvents = useCallback((provider: Eip1193Provider) => {
+    unsubscribeRef.current?.()
+    unsubscribeRef.current = subscribeProvider(provider, {
+      onAccountsChanged: (accounts) => {
+        if (accounts.length === 0) {
+          disconnectActiveWallet()
+          setState(s => ({
+            ...s,
+            address: null,
+            isConnected: false,
+            isCorrectNetwork: false,
+            connectionMode: null,
+          }))
+        } else {
+          setState(s => ({ ...s, address: accounts[0] }))
+        }
+      },
+      onChainChanged: async () => {
+        const isCorrect = await checkNetwork(provider)
+        setState(s => ({ ...s, isCorrectNetwork: isCorrect }))
+      },
+      onDisconnect: () => {
+        setState(s => ({
+          ...s,
+          address: null,
+          isConnected: false,
+          isCorrectNetwork: false,
+          connectionMode: null,
+        }))
+      },
+    })
   }, [])
 
-  // 지갑 연결
-  const connect = useCallback(async () => {
-    if (!window.ethereum) {
-      setState(s => ({ ...s, error: '메타마스크가 설치되어 있지 않습니다.' }))
-      return
-    }
-
+  const connectWithMode = useCallback(async (mode: WalletConnectionMode) => {
     setState(s => ({ ...s, isConnecting: true, error: null }))
 
     try {
-      // 계정 요청
-      const accounts: string[] = await window.ethereum.request({
-        method: 'eth_requestAccounts',
-      })
+      const provider =
+        mode === 'injected'
+          ? await connectInjectedWallet()
+          : await connectWalletConnect()
 
+      const accounts: string[] = await provider.request({ method: 'eth_requestAccounts' })
       if (!accounts.length) {
+        await disconnectActiveWallet()
         setState(s => ({ ...s, isConnecting: false, error: '지갑 연결이 거부되었습니다.' }))
         return
       }
 
-      // 네트워크 확인 & 전환
-      const isCorrect = await checkNetwork()
-      if (!isCorrect) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: ARBITRUM_SEPOLIA_CHAIN_ID }],
-          })
-        } catch (switchErr: any) {
-          // 체인이 없으면 추가
-          if (switchErr.code === 4902) {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [ARBITRUM_SEPOLIA_CONFIG],
-            })
-          } else {
-            throw switchErr
-          }
-        }
-      }
+      const isCorrect = await ensureArbitrumSepolia(provider)
+      bindProviderEvents(provider)
 
-      const finalCorrect = await checkNetwork()
-
-      setState({
+      setState(s => ({
+        ...s,
         address: accounts[0],
         isConnected: true,
-        isCorrectNetwork: finalCorrect,
+        isCorrectNetwork: isCorrect,
         isConnecting: false,
         error: null,
-      })
+        connectionMode: mode,
+      }))
     } catch (err: any) {
+      await disconnectActiveWallet()
       setState(s => ({
         ...s,
         isConnecting: false,
-        error: err.message || '지갑 연결에 실패했습니다.',
+        error: err?.message || '지갑 연결에 실패했습니다.',
       }))
     }
-  }, [checkNetwork])
+  }, [bindProviderEvents])
 
-  // 연결 해제
-  const disconnect = useCallback(() => {
-    setState({
+  const connect = useCallback(async () => {
+    if (state.isMobileBrowser || !hasInjectedWallet()) {
+      await connectWithMode('walletconnect')
+      return
+    }
+    await connectWithMode('injected')
+  }, [connectWithMode, state.isMobileBrowser])
+
+  const connectInjected = useCallback(async () => {
+    await connectWithMode('injected')
+  }, [connectWithMode])
+
+  const connectMobile = useCallback(async () => {
+    await connectWithMode('walletconnect')
+  }, [connectWithMode])
+
+  const disconnect = useCallback(async () => {
+    unsubscribeRef.current?.()
+    unsubscribeRef.current = null
+    await disconnectActiveWallet()
+    setState(s => ({
+      ...s,
       address: null,
       isConnected: false,
       isCorrectNetwork: false,
       isConnecting: false,
       error: null,
-    })
+      connectionMode: null,
+    }))
   }, [])
 
-  // WON 토큰 전송 (정산) — 공급자별 지갑 + 요금 반영
   const transferWon = useCallback(async (amountKwh: number, supplierWallet: string, ratePerKwh: number): Promise<string> => {
-    if (!window.ethereum || !state.isConnected) {
+    if (!state.isConnected) {
       throw new Error('지갑이 연결되어 있지 않습니다.')
     }
 
+    const eip1193 = requireProvider()
     const wonAmount = amountKwh * ratePerKwh
-    const provider = new BrowserProvider(window.ethereum)
+    const provider = new BrowserProvider(eip1193)
     const signer = await provider.getSigner()
     const contract = new Contract(WON_TOKEN_ADDRESS, WON_TOKEN_ABI, signer)
 
-    // 🔥 [수정 1] 자바스크립트 부동소수점 에러 방지를 위해 소수점 6자리까지만 잘라서 문자열로 변환 (안전장치)
     const safeWonAmountString = Number(wonAmount).toFixed(6)
     const amount = parseUnits(safeWonAmountString, 18)
-
-    // 🔥 [수정 2] 가스비(수수료) 에러 해결을 위한 FeeData 수동 조회 및 50% 넉넉한 버퍼 추가
     const feeData = await provider.getFeeData()
 
     const tx = await contract.transfer(supplierWallet, amount, {
-      // 현재 네트워크가 요구하는 수수료에 1.5배(150%)를 곱해서 강제로 여유 있게 세팅해줍니다. (빅인트 계산법: * 150n / 100n)
       maxFeePerGas: feeData.maxFeePerGas ? (feeData.maxFeePerGas * 150n) / 100n : undefined,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ? (feeData.maxPriorityFeePerGas * 150n) / 100n : undefined,
     })
-    
-    const receipt = await tx.wait()
 
+    const receipt = await tx.wait()
     return receipt.hash
   }, [state.isConnected])
 
-  /** P2P — 원장 purchaseEnergy: WON → 생산자 + totalSoldWh·EnergySold (approve는 1회만, 이후 정산 1번) */
   const purchaseProducerEnergy = useCallback(async (
     whAmount: number,
     producerWallet: string,
   ): Promise<string> => {
-    if (!window.ethereum || !state.isConnected) {
+    if (!state.isConnected) {
       throw new Error('지갑이 연결되어 있지 않습니다.')
     }
 
     const producer = getAddress(producerWallet)
     const whInt = BigInt(Math.max(1, Math.round(whAmount)))
-    const provider = new BrowserProvider(window.ethereum)
+    const eip1193 = requireProvider()
+    const provider = new BrowserProvider(eip1193)
     const signer = await provider.getSigner()
     const buyer = await signer.getAddress()
     const feeData = await provider.getFeeData()
@@ -205,7 +280,7 @@ export function useWallet() {
     const ledger = new Contract(getAddress(PRODUCER_LEDGER_ADDRESS), PRODUCER_LEDGER_ABI, signer)
     const rate = await ledger.ratePerKwh(producer)
     if (rate === 0n) {
-      throw new Error('생산자 단가가 온체인에 없습니다. 생산자 탭에서 MetaMask 연결 후 단가를 저장해 주세요.')
+      throw new Error('생산자 단가가 온체인에 없습니다. 생산자 탭에서 지갑 연결 후 단가를 저장해 주세요.')
     }
 
     const wonCost = (whInt * rate * 10n ** 18n) / 1000n
@@ -236,17 +311,19 @@ export function useWallet() {
       }
       const msg = err instanceof Error ? err.message : ''
       if (msg.includes('user rejected') || msg.includes('User denied')) {
-        throw new Error('MetaMask에서 정산이 취소되었습니다.')
+        throw new Error('지갑에서 정산이 취소되었습니다.')
       }
       throw err
     }
   }, [state.isConnected])
 
   const setProducerRateOnChain = useCallback(async (rate: number): Promise<string> => {
-    if (!window.ethereum || !state.isConnected) {
+    if (!state.isConnected) {
       throw new Error('지갑이 연결되어 있지 않습니다.')
     }
-    const provider = new BrowserProvider(window.ethereum)
+
+    const eip1193 = requireProvider()
+    const provider = new BrowserProvider(eip1193)
     const signer = await provider.getSigner()
     const ledger = new Contract(getAddress(PRODUCER_LEDGER_ADDRESS), PRODUCER_LEDGER_ABI, signer)
     const tx = await ledger.setRate(Math.round(rate))
@@ -254,55 +331,88 @@ export function useWallet() {
     return receipt.hash
   }, [state.isConnected])
 
-  // 계정/체인 변경 감지
   useEffect(() => {
-    if (!window.ethereum) return
+    let cancelled = false
 
-    const handleAccountsChanged = (accounts: string[]) => {
-      if (accounts.length === 0) {
-        disconnect()
-      } else {
-        setState(s => ({ ...s, address: accounts[0] }))
-      }
-    }
+    async function restoreSession() {
+      const provider = getActiveEip1193Provider() ?? (await restoreWalletConnectSession())
+      if (!provider || cancelled) return
 
-    const handleChainChanged = async () => {
-      const isCorrect = await checkNetwork()
-      setState(s => ({ ...s, isCorrectNetwork: isCorrect }))
-    }
+      try {
+        const accounts: string[] = await provider.request({ method: 'eth_accounts' })
+        if (accounts.length === 0) return
 
-    window.ethereum.on('accountsChanged', handleAccountsChanged)
-    window.ethereum.on('chainChanged', handleChainChanged)
+        bindProviderEvents(provider)
+        const isCorrect = await checkNetwork(provider)
+        if (cancelled) return
 
-    return () => {
-      window.ethereum?.removeListener('accountsChanged', handleAccountsChanged)
-      window.ethereum?.removeListener('chainChanged', handleChainChanged)
-    }
-  }, [checkNetwork, disconnect])
-
-  // 이미 연결된 계정 자동 감지
-  useEffect(() => {
-    if (!window.ethereum) return
-    window.ethereum.request({ method: 'eth_accounts' }).then(async (accounts: string[]) => {
-      if (accounts.length > 0) {
-        const isCorrect = await checkNetwork()
-        setState({
+        setState(s => ({
+          ...s,
           address: accounts[0],
           isConnected: true,
           isCorrectNetwork: isCorrect,
           isConnecting: false,
           error: null,
-        })
+          connectionMode: getConnectionMode(),
+        }))
+      } catch {
+        // ignore restore errors
       }
-    }).catch(() => {})
-  }, [checkNetwork])
+    }
 
-  return { ...state, connect, disconnect, transferWon, purchaseProducerEnergy, setProducerRateOnChain }
+    if (window.ethereum) {
+      window.ethereum.request({ method: 'eth_accounts' }).then(async (accounts: string[]) => {
+        if (cancelled) return
+        if (accounts.length === 0) {
+          await restoreSession()
+          return
+        }
+
+        await connectInjectedWallet()
+        bindProviderEvents(window.ethereum!)
+        const isCorrect = await checkNetwork(window.ethereum!)
+        if (cancelled) return
+
+        setState(s => ({
+          ...s,
+          address: accounts[0],
+          isConnected: true,
+          isCorrectNetwork: isCorrect,
+          isConnecting: false,
+          error: null,
+          connectionMode: 'injected',
+        }))
+      }).catch(() => {
+        restoreSession()
+      })
+    } else {
+      restoreSession()
+    }
+
+    return () => {
+      cancelled = true
+      unsubscribeRef.current?.()
+    }
+  }, [bindProviderEvents])
+
+  return {
+    ...state,
+    connect,
+    connectInjected,
+    connectMobile,
+    disconnect,
+    transferWon,
+    purchaseProducerEnergy,
+    setProducerRateOnChain,
+  }
 }
 
-// Window 타입 확장
 declare global {
   interface Window {
-    ethereum?: any
+    ethereum?: {
+      request: (args: { method: string; params?: unknown[] }) => Promise<any>
+      on?: (event: string, handler: (...args: any[]) => void) => void
+      removeListener?: (event: string, handler: (...args: any[]) => void) => void
+    }
   }
 }
