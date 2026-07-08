@@ -374,8 +374,11 @@ async function buildProducerPayload(producer) {
   const ledgerSales = await fetchLedgerSales(producer);
   const wonSales = await fetchWonInboundSales(producer, ratePerKwh);
   const salesByTx = new Map();
-  for (const s of [...ledgerSales, ...wonSales]) salesByTx.set(s.txHash.toLowerCase(), s);
-  const sales = Array.from(salesByTx.values()).sort((a, b) => a.timestamp - b.timestamp);
+  // WON Transfer와 EnergySold가 같은 tx — 원장(계량기 매칭 포함) 우선
+  for (const s of wonSales) salesByTx.set(s.txHash.toLowerCase(), s);
+  for (const s of ledgerSales) salesByTx.set(s.txHash.toLowerCase(), s);
+  const mergedSales = Array.from(salesByTx.values()).sort((a, b) => a.timestamp - b.timestamp);
+  const sales = await enrichProducerSalesWithMeterWallets(mergedSales);
 
   const soldWh = ledgerSoldWh > 0 ? ledgerSoldWh : wonSales.reduce((sum, s) => sum + s.wh, 0);
   const availableWh = Math.max(0, Number((meterTotalWh - soldWh).toFixed(4)));
@@ -424,8 +427,9 @@ const {
 async function enrichLedgerTransfersWithWallets(transfers) {
   const devices = await getKnownConsumerMeterDevices();
   const readingsMap = await buildMeterReadingsMap(devices);
+  const buyerToMeter = {};
 
-  return transfers.map((t) => {
+  const enriched = transfers.map((t) => {
     const buyer = t.from;
     const soldWh = Number(t.soldWh ?? 0);
     const { meterWallet } = resolveMeterWalletForSoldWh(
@@ -434,11 +438,55 @@ async function enrichLedgerTransfersWithWallets(transfers) {
       t.timestamp,
       buyer,
     );
+    if (meterWallet) buyerToMeter[buyer.toLowerCase()] = meterWallet;
     return {
       ...t,
       buyerWallet: buyer,
       meterWallet: meterWallet || null,
     };
+  });
+
+  return enriched.map((t) => {
+    if (t.meterWallet) return t;
+    const cached = buyerToMeter[t.buyerWallet.toLowerCase()];
+    if (!cached) return t;
+    return { ...t, meterWallet: cached };
+  });
+}
+
+/** 판매 내역 — soldWh 주차 매칭 + 동일 결제 지갑의 기존 계량기 연결 */
+async function enrichProducerSalesWithMeterWallets(sales) {
+  const devices = await getKnownConsumerMeterDevices();
+  const readingsMap = await buildMeterReadingsMap(devices);
+  const buyerToMeter = {};
+
+  const enriched = sales.map((sale) => {
+    const buyer = sale.buyerWallet ?? sale.from;
+    const soldWh = Number(sale.wh ?? 0);
+    const { meterWallet, week } = resolveMeterWalletForSoldWh(
+      readingsMap,
+      soldWh,
+      sale.timestamp,
+      buyer,
+    );
+    if (meterWallet) buyerToMeter[buyer.toLowerCase()] = meterWallet;
+
+    return {
+      ...sale,
+      buyerWallet: buyer,
+      meterWallet: meterWallet ?? sale.meterWallet ?? null,
+      weekIndex: week?.weekIndex ?? sale.weekIndex,
+      weekLabel: week?.weekLabel ?? sale.weekLabel,
+      meterReadingCount: week?.readings?.length ?? sale.meterReadingCount,
+    };
+  });
+
+  return enriched.map((sale) => {
+    if (sale.meterWallet) return sale;
+    const buyer = (sale.buyerWallet ?? sale.from).toLowerCase();
+    const cached = buyerToMeter[buyer];
+    if (!cached) return sale;
+    return { ...sale, meterWallet: cached };
   });
 }
 
