@@ -2,7 +2,8 @@ import type { EnergyReading, SettlementTransfer } from '../hooks/useEnergyData'
 import { PRESET_SETTLEMENT_RATES } from '../hooks/useWallet'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
-const EPOCH_START = new Date('2026-05-04T00:00:00+09:00')
+export const SETTLEMENT_EPOCH_START = new Date('2026-05-04T00:00:00+09:00')
+const EPOCH_START = SETTLEMENT_EPOCH_START
 
 export interface WeekRow {
   weekIndex: number
@@ -45,6 +46,95 @@ function formatWeekLabel(start: Date, end: Date): string {
 
 function getCurrentWeekIndex(): number {
   return Math.floor((Date.now() - EPOCH_START.getTime()) / WEEK_MS)
+}
+
+/** EPOCH(2026-05)부터 현재 월까지 — 계량 유무와 무관하게 모든 달 포함 */
+export function getSettlementEpochMonths(): { year: number; month: number; label: string }[] {
+  const startYear = EPOCH_START.getFullYear()
+  const startMonth = EPOCH_START.getMonth()
+  const now = new Date()
+  const endYear = now.getFullYear()
+  const endMonth = now.getMonth()
+
+  const months: { year: number; month: number; label: string }[] = []
+  let year = startYear
+  let month = startMonth
+
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    months.push({ year, month, label: `${year}년 ${month + 1}월` })
+    month += 1
+    if (month > 11) {
+      month = 0
+      year += 1
+    }
+  }
+
+  return months
+}
+
+/** 해당 달과 겹치는 EPOCH 주차 범위 (월 경계 주차 누락 방지) */
+export function getSettlementMonthWeekRange(year: number, month: number): { first: number; last: number } {
+  const monthStart = new Date(year, month, 1, 0, 0, 0, 0)
+  const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999)
+  const epochMs = EPOCH_START.getTime()
+  const currentWeekIdx = getCurrentWeekIndex()
+
+  if (monthEnd.getTime() < epochMs) {
+    return { first: 0, last: -1 }
+  }
+
+  const rangeStart = Math.max(monthStart.getTime(), epochMs)
+  let first = Math.floor((rangeStart - epochMs) / WEEK_MS)
+  let last = Math.floor((monthEnd.getTime() - epochMs) / WEEK_MS)
+  last = Math.min(last, currentWeekIdx)
+
+  if (first > last) {
+    return { first: 0, last: -1 }
+  }
+
+  return { first, last }
+}
+
+export function getCurrentSettlementWeekIndex(): number {
+  return getCurrentWeekIndex()
+}
+
+export function buildEpochWeekRows(
+  firstIdx: number,
+  lastIdx: number,
+  readings: EnergyReading[],
+): WeekRow[] {
+  if (lastIdx < firstIdx) return []
+
+  const readingsByWeek: Record<number, EnergyReading[]> = {}
+  for (const r of readings) {
+    const idx = getWeekIndex(r.timestamp)
+    if (!readingsByWeek[idx]) readingsByWeek[idx] = []
+    readingsByWeek[idx].push(r)
+  }
+
+  const current = getCurrentWeekIndex()
+  const rows: WeekRow[] = []
+
+  for (let weekIndex = firstIdx; weekIndex <= lastIdx; weekIndex += 1) {
+    const start = getWeekStart(weekIndex)
+    const end = getWeekEnd(weekIndex)
+    const weekReadings = readingsByWeek[weekIndex] ?? []
+    const totalWh = weekReadings.reduce((sum, r) => sum + r.wh, 0)
+
+    rows.push({
+      weekIndex,
+      weekLabel: formatWeekLabel(start, end),
+      start,
+      end,
+      totalWh: Number(totalWh.toFixed(4)),
+      totalKWh: totalWh / 1000,
+      isCurrent: weekIndex === current,
+      isEmpty: weekReadings.length === 0,
+    })
+  }
+
+  return rows
 }
 
 function amountsMatch(expected: number, actual: number): boolean {

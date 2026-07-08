@@ -1,6 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import type { EnergyReading, SettlementTransfer } from '../hooks/useEnergyData'
 import type { EnergySupplier } from '../hooks/useWallet'
+import {
+  getSettlementEpochMonths,
+  getSettlementMonthWeekRange,
+  buildEpochWeekRows,
+  getWeekIndex,
+} from '../lib/settlementMatch'
 import {
   Calendar, Coins, CheckCircle2, Loader2,
   AlertCircle, ChevronLeft, ChevronRight, Clock,
@@ -27,58 +33,6 @@ interface Props {
   consumerWallet?: string
   onTransfer: (amountKwh: number, supplierWallet: string, rate: number) => Promise<string>
   onSettlementDone: () => void
-}
-
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000
-const EPOCH_START = new Date('2026-05-04T00:00:00+09:00')
-
-function getWeekIndex(timestamp: number): number {
-  const date = new Date(timestamp * 1000)
-  return Math.floor((date.getTime() - EPOCH_START.getTime()) / WEEK_MS)
-}
-
-function getWeekStart(weekIndex: number): Date {
-  return new Date(EPOCH_START.getTime() + weekIndex * WEEK_MS)
-}
-
-function getWeekEnd(weekIndex: number): Date {
-  return new Date(EPOCH_START.getTime() + (weekIndex + 1) * WEEK_MS - 1)
-}
-
-function formatDate(d: Date): string {
-  return `${d.getMonth() + 1}/${d.getDate()}`
-}
-
-function getMonthWeekRange(year: number, month: number): { first: number; last: number } {
-  const monthStart = new Date(year, month, 1)
-  const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999)
-
-  let firstMonday = new Date(monthStart)
-  while (firstMonday.getDay() !== 1) firstMonday.setDate(firstMonday.getDate() + 1)
-
-  let lastMonday = new Date(monthEnd)
-  while (lastMonday.getDay() !== 1) lastMonday.setDate(lastMonday.getDate() - 1)
-
-  const firstIdx = Math.floor((firstMonday.getTime() - EPOCH_START.getTime()) / WEEK_MS)
-  const lastIdx = Math.floor((lastMonday.getTime() - EPOCH_START.getTime()) / WEEK_MS)
-  return { first: firstIdx, last: lastIdx }
-}
-
-function getCurrentWeekIndex(): number {
-  return Math.floor((Date.now() - EPOCH_START.getTime()) / WEEK_MS)
-}
-
-function getAvailableMonths(readings: EnergyReading[]): { year: number; month: number; label: string }[] {
-  const monthSet = new Set<string>()
-  const now = new Date()
-  monthSet.add(`${now.getFullYear()}-${now.getMonth()}`)
-  for (const r of readings) {
-    const d = new Date(r.timestamp * 1000)
-    monthSet.add(`${d.getFullYear()}-${d.getMonth()}`)
-  }
-  return Array.from(monthSet)
-    .map(key => { const [y, m] = key.split('-').map(Number); return { year: y, month: m, label: `${y}년 ${m + 1}월` } })
-    .sort((a, b) => a.year - b.year || a.month - b.month)
 }
 
 /**
@@ -158,11 +112,14 @@ export default function WeeklySettlement({
   const [settling, setSettling] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const availableMonths = useMemo(() => getAvailableMonths(readings), [readings])
-  const [selectedMonthIdx, setSelectedMonthIdx] = useState(availableMonths.length - 1)
-  const selectedMonth = availableMonths[Math.max(0, Math.min(selectedMonthIdx, availableMonths.length - 1))]
+  const availableMonths = useMemo(() => getSettlementEpochMonths(), [])
+  const [selectedMonthIdx, setSelectedMonthIdx] = useState(() => Math.max(0, getSettlementEpochMonths().length - 1))
 
-  const currentWeekIndex = useMemo(() => getCurrentWeekIndex(), [])
+  useEffect(() => {
+    setSelectedMonthIdx((prev) => Math.min(prev, Math.max(0, availableMonths.length - 1)))
+  }, [availableMonths.length])
+
+  const selectedMonth = availableMonths[Math.max(0, Math.min(selectedMonthIdx, availableMonths.length - 1))]
 
   const readingsByWeek = useMemo(() => {
     const map: Record<number, EnergyReading[]> = {}
@@ -176,29 +133,16 @@ export default function WeeklySettlement({
 
   const weeks: WeekRow[] = useMemo(() => {
     if (!selectedMonth) return []
-    const { first, last } = getMonthWeekRange(selectedMonth.year, selectedMonth.month)
-    const rows: WeekRow[] = []
+    const { first, last } = getSettlementMonthWeekRange(selectedMonth.year, selectedMonth.month)
 
-    for (let idx = first; idx <= last; idx++) {
-      const start = getWeekStart(idx)
-      const end = getWeekEnd(idx)
-      const weekReadings = readingsByWeek[idx] ?? []
-      const totalWh = weekReadings.reduce((sum, r) => sum + r.wh, 0)
-      const totalKWh = totalWh / 1000
-      const wonAmount = totalKWh * supplier.rate
-
-      rows.push({
-        weekIndex: idx,
-        weekLabel: `${formatDate(start)} ~ ${formatDate(end)}`,
-        start, end,
-        readings: weekReadings,
-        totalWh, totalKWh, wonAmount,
-        isCurrent: idx === currentWeekIndex,
-        isEmpty: weekReadings.length === 0,
-      })
-    }
-    return rows.sort((a, b) => b.weekIndex - a.weekIndex)
-  }, [selectedMonth, readingsByWeek, currentWeekIndex, supplier.rate])
+    return buildEpochWeekRows(first, last, readings)
+      .map((row) => ({
+        ...row,
+        readings: readingsByWeek[row.weekIndex] ?? [],
+        wonAmount: row.totalKWh * supplier.rate,
+      }))
+      .sort((a, b) => b.weekIndex - a.weekIndex)
+  }, [selectedMonth, readings, readingsByWeek, supplier.rate])
 
   const onchainSettled = useMemo(
     () => matchSettlementsToWeeks(weeks, settlements, supplier.wallet, consumerWallet),
@@ -273,8 +217,9 @@ export default function WeeklySettlement({
           const chainMatch = onchainSettled[week.weekIndex]
           const justMatch = justSettled[week.weekIndex]
           const settledTxHash = chainMatch?.txHash || justMatch || null
-          const isSettled = !!settledTxHash || (week.isEmpty && !week.isCurrent)
+          const isSettled = !!settledTxHash
           const isSettling = settling === week.weekIndex
+          const canSettle = week.totalKWh > 0
 
           return (
             <div key={week.weekIndex}
@@ -307,6 +252,10 @@ export default function WeeklySettlement({
                         className="text-[10px] text-brand-100 hover:underline">Tx</a>
                     )}
                   </div>
+                ) : !canSettle ? (
+                  <button disabled className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-bg-subtle text-fg-muted cursor-not-allowed">
+                    <Clock className="w-3.5 h-3.5" />계량 없음
+                  </button>
                 ) : (
                   <button onClick={() => handleSettle(week)}
                     disabled={!isWalletConnected || isSettling}
