@@ -26,6 +26,8 @@ export interface VerifiedWeeklySettlement {
   txHash: string
   timestamp: number
   supplierWallet: string
+  buyerWallet?: string
+  meterWallet?: string | null
 }
 
 export function getWeekIndex(timestamp: number): number {
@@ -395,6 +397,8 @@ export function matchVerifiedWeeklySettlements(
         txHash: m.txHash,
         timestamp: purchase?.timestamp ?? 0,
         supplierWallet: m.to,
+        buyerWallet: purchase?.buyerWallet ?? purchase?.from,
+        meterWallet: purchase?.meterWallet ?? null,
       }
     })
     .filter((r): r is VerifiedWeeklySettlement => r != null)

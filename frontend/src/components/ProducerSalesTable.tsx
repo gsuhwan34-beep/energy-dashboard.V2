@@ -40,7 +40,10 @@ export default function ProducerSalesTable({ sales, verifiedCount, rawInboundCou
               <th className="px-4 py-2 font-medium">정산 주차</th>
               <th className="px-4 py-2 font-medium">일시</th>
               <th className="px-4 py-2 font-medium">
-                <InfoTooltip label="구매자(계량기)" tip={BLOCKCHAIN_TIPS.meterAddress} />
+                <InfoTooltip label="결제 지갑" tip={BLOCKCHAIN_TIPS.paymentWallet} />
+              </th>
+              <th className="px-4 py-2 font-medium">
+                <InfoTooltip label="계량기 지갑" tip={BLOCKCHAIN_TIPS.meterAddress} />
               </th>
               <th className="px-4 py-2 font-medium text-right">
                 <InfoTooltip label="계량 kWh" tip={BLOCKCHAIN_TIPS.kwh} />
@@ -65,7 +68,12 @@ export default function ProducerSalesTable({ sales, verifiedCount, rawInboundCou
                   {new Date(sale.timestamp * 1000).toLocaleString('ko-KR')}
                 </td>
                 <td className="px-4 py-2.5 font-mono text-fg-base">
-                  {shortAddr(sale.from)}
+                  {shortAddr(sale.buyerWallet ?? sale.from)}
+                </td>
+                <td className="px-4 py-2.5 font-mono text-fg-base">
+                  {sale.meterWallet ? shortAddr(sale.meterWallet) : (
+                    <span className="text-fg-muted">미확인</span>
+                  )}
                 </td>
                 <td className="px-4 py-2.5 text-right font-semibold text-brand-100">
                   {sale.kWh.toFixed(4)}

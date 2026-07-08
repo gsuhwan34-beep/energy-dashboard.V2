@@ -70,6 +70,34 @@ function normalizePowerValue(powerValue, timestamp) {
   return value;
 }
 
+let consumerMeterDevicesCache = null;
+
+async function getKnownConsumerMeterDevices() {
+  if (consumerMeterDevicesCache) return consumerMeterDevicesCache;
+  const filter = meterContract.filters.EnergyDataRecorded();
+  const logs = await meterContract.queryFilter(filter, START_BLOCK, 'latest');
+  const set = new Set();
+  for (const log of logs) {
+    try {
+      set.add(ethers.getAddress(log.args[0]).toLowerCase());
+    } catch {
+      // skip malformed logs
+    }
+  }
+  consumerMeterDevicesCache = Array.from(set);
+  return consumerMeterDevicesCache;
+}
+
+async function buildMeterReadingsMap(devices) {
+  const map = {};
+  await Promise.all(
+    devices.map(async (device) => {
+      map[device.toLowerCase()] = await fetchConsumerReadings(device);
+    }),
+  );
+  return map;
+}
+
 async function fetchConsumerReadings(consumerWallet) {
   const filter = meterContract.filters.EnergyDataRecorded(consumerWallet);
   const logs = await meterContract.queryFilter(filter, START_BLOCK, 'latest');
@@ -244,28 +272,42 @@ async function fetchLedgerSales(producer) {
     const soldFilter = producerLedgerContract.filters.EnergySold(producer);
     const soldLogs = await producerLedgerContract.queryFilter(soldFilter, START_BLOCK, 'latest');
 
-    const sales = soldLogs.map((log) => {
+    const devices = await getKnownConsumerMeterDevices();
+    const readingsMap = await buildMeterReadingsMap(devices);
+
+    const sales = [];
+    for (const log of soldLogs) {
       const soldWh = Number(log.args.soldWh ?? log.args[2]);
       const wonPaid = Number(ethers.formatUnits(log.args.wonPaid ?? log.args[4] ?? log.args[5], 18));
       const timestamp = Number(log.args.timestamp ?? log.args[5] ?? log.args[6]);
       const buyer = ethers.getAddress(log.args.buyer ?? log.args[1]);
       const ratePerKwh = soldWh > 0 ? Number(((wonPaid / soldWh) * 1000).toFixed(2)) : 0;
-      return {
+
+      const { meterWallet, week } = resolveMeterWalletForSoldWh(
+        readingsMap,
+        soldWh,
+        timestamp,
+        buyer,
+      );
+
+      sales.push({
         txHash: log.transactionHash,
         blockNumber: log.blockNumber,
         timestamp,
         from: buyer,
+        buyerWallet: buyer,
+        meterWallet: meterWallet || null,
         to: producer,
         wonAmount: wonPaid,
         kWh: Number((soldWh / 1000).toFixed(6)),
         wh: soldWh,
-        weekIndex: -1,
-        weekLabel: '온체인 P2P 구매',
+        weekIndex: week?.weekIndex ?? -1,
+        weekLabel: week?.weekLabel ?? '온체인 P2P 구매',
         ratePerKwh,
-        meterReadingCount: 0,
+        meterReadingCount: week?.readings?.length ?? 0,
         verified: true,
-      };
-    });
+      });
+    }
 
     sales.sort((a, b) => a.timestamp - b.timestamp);
     return sales;
@@ -373,7 +415,32 @@ async function buildProducerPayload(producer) {
 
 const fs = require('fs');
 const path = require('path');
-const { findMeterVerifiedTransfers, findLedgerPurchasesForMeter } = require('./lib/settlementMatch');
+const {
+  findMeterVerifiedTransfers,
+  findLedgerPurchasesForMeter,
+  resolveMeterWalletForSoldWh,
+} = require('./lib/settlementMatch');
+
+async function enrichLedgerTransfersWithWallets(transfers) {
+  const devices = await getKnownConsumerMeterDevices();
+  const readingsMap = await buildMeterReadingsMap(devices);
+
+  return transfers.map((t) => {
+    const buyer = t.from;
+    const soldWh = Number(t.soldWh ?? 0);
+    const { meterWallet } = resolveMeterWalletForSoldWh(
+      readingsMap,
+      soldWh,
+      t.timestamp,
+      buyer,
+    );
+    return {
+      ...t,
+      buyerWallet: buyer,
+      meterWallet: meterWallet || null,
+    };
+  });
+}
 
 const SUPPLIER_PRICES_FILE = path.join(__dirname, 'supplier-prices.json');
 let supplierPrices = {};
@@ -496,9 +563,10 @@ app.get('/api/energy/settlements', async (req, res) => {
       }
 
       transfers.sort((a, b) => a.timestamp - b.timestamp);
+      const enriched = await enrichLedgerTransfersWithWallets(transfers);
       return res.json({
         wonToken: WON_ADDRESS,
-        transfers,
+        transfers: enriched,
       });
     }
 

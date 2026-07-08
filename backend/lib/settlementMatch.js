@@ -246,10 +246,62 @@ function findLedgerPurchasesForMeter(readings, ledgerTransfers) {
   return matched;
 }
 
+/** soldWh와 주차 계량 Wh가 맞는 주차를 계량기 readings에서 찾음 */
+function matchMeterWeekForSoldWh(readings, soldWh, timestamp) {
+  if (!readings?.length || !soldWh || soldWh <= 0) return null;
+
+  const weeks = groupReadingsByWeek(readings).filter((w) => w.totalWh > 0);
+  if (!weeks.length) return null;
+
+  const weekIdx = timestamp ? getWeekIndex(timestamp) : null;
+
+  if (weekIdx != null) {
+    const exact = weeks.find(
+      (w) => w.weekIndex === weekIdx && whAmountsMatch(w.totalWh, soldWh),
+    );
+    if (exact) return exact;
+  }
+
+  for (const w of weeks) {
+    if (whAmountsMatch(w.totalWh, soldWh)) return w;
+  }
+  return null;
+}
+
+/**
+ * EnergySold의 buyer(결제 지갑)와 soldWh로 실제 계량기 지갑을 역추적.
+ * MetaMask 결제 지갑 ≠ IoT 계량기 지갑인 경우에도 매칭.
+ */
+function resolveMeterWalletForSoldWh(meterReadingsMap, soldWh, timestamp, buyerWallet) {
+  const buyerLower = (buyerWallet || '').toLowerCase();
+
+  const tryMeter = (meter) => {
+    const readings = meterReadingsMap[meter.toLowerCase()];
+    if (!readings?.length) return null;
+    const week = matchMeterWeekForSoldWh(readings, soldWh, timestamp);
+    return week ? { meterWallet: meter, week } : null;
+  };
+
+  if (buyerWallet) {
+    const hit = tryMeter(buyerWallet);
+    if (hit) return { buyerWallet, ...hit };
+  }
+
+  for (const meter of Object.keys(meterReadingsMap)) {
+    if (meter.toLowerCase() === buyerLower) continue;
+    const hit = tryMeter(meter);
+    if (hit) return { buyerWallet, ...hit };
+  }
+
+  return { buyerWallet, meterWallet: null, week: null };
+}
+
 module.exports = {
   matchVerifiedProducerSales,
   findMeterVerifiedTransfers,
   findLedgerPurchasesForMeter,
+  matchMeterWeekForSoldWh,
+  resolveMeterWalletForSoldWh,
   groupReadingsByWeek,
   getWeekIndex,
   whAmountsMatch,

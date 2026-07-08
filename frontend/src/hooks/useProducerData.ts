@@ -24,7 +24,12 @@ export interface VerifiedProducerSale {
   txHash: string
   blockNumber: number
   timestamp: number
+  /** @deprecated 결제 지갑 — buyerWallet 사용 */
   from: string
+  /** MetaMask 등 purchaseEnergy 결제 지갑 */
+  buyerWallet?: string
+  /** IoT 계량기 지갑 (EnergyDataRecorded 주소) */
+  meterWallet?: string | null
   to: string
   wonAmount: number
   kWh: number
