@@ -377,9 +377,9 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     tagline: 'Unified Ledger · Project Hangang',
     shortDesc:
       'BIS 「통합원장」 창시자 신현송 총재 취임 이후 가속화되는 「프로젝트 한강」·「프로젝트 아고라」와 연동 가능한 에너지 엣지 정산 인프라입니다.',
-    imageCaption: '신현송 총재 · 통합원장·디지털 화폐 포럼 (2026.7)',
+    imageCaption: '2026 ECB 포럼: 신현송 한은 총재 토큰화 발언',
     secondaryImageCaption: '이창용 전 총재 · 원화 스테이블코인 국회 발언 (2025.8.19)',
-    heroImage: '/presentation/bok-shin-forum.png',
+    heroImage: '/presentation/bok-shin-ecb-forum.png',
     secondaryPhoto: '/presentation/bok-governor-slide.png',
     modalPhoto: '/presentation/bok-governor-news.png',
     modalPhotoCaption: '이창용 전 총재 · 디지털 화폐·스테이블코인 관련 보도 (2025)',

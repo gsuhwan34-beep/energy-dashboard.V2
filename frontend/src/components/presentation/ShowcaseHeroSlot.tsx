@@ -1,6 +1,20 @@
 import { ImageIcon } from 'lucide-react'
 import type { ShowcaseTab } from './showcaseContent'
 
+function HeroPhoto({ src, caption }: { src: string; caption: string }) {
+  return (
+    <div className="min-h-0 h-full w-full flex flex-col items-center justify-center overflow-hidden gap-1.5">
+      <div className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
+        <img
+          src={src}
+          alt={caption}
+          className="block max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-md"
+        />
+      </div>
+    </div>
+  )
+}
+
 export function ShowcaseHeroSlot({ tab }: { tab: ShowcaseTab }) {
   if (tab.heroImage) {
     const photos = tab.secondaryPhoto
@@ -11,15 +25,14 @@ export function ShowcaseHeroSlot({ tab }: { tab: ShowcaseTab }) {
       : [{ src: tab.heroImage, caption: tab.imageCaption }]
 
     return (
-      <div className="h-full rounded-xl border border-indigo-200 bg-slate-100 flex flex-col items-center justify-center p-3 min-h-[200px] gap-2">
-        <div className={`w-full flex-1 min-h-0 grid gap-2 ${photos.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} items-center`}>
+      <div className="h-full rounded-xl border border-indigo-200 bg-slate-100 flex flex-col overflow-hidden p-3 min-h-[200px] gap-2">
+        <div
+          className={`w-full flex-1 min-h-0 overflow-hidden grid gap-2 ${
+            photos.length > 1 ? 'grid-cols-2' : 'grid-cols-1'
+          }`}
+        >
           {photos.map((photo) => (
-            <img
-              key={photo.src}
-              src={photo.src}
-              alt={photo.caption}
-              className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-md mx-auto"
-            />
+            <HeroPhoto key={photo.src} src={photo.src} caption={photo.caption} />
           ))}
         </div>
         {photos.length > 1 ? (
@@ -31,7 +44,7 @@ export function ShowcaseHeroSlot({ tab }: { tab: ShowcaseTab }) {
             ))}
           </div>
         ) : (
-          <p className="text-[9px] text-slate-500 text-center leading-tight shrink-0">{tab.imageCaption}</p>
+          <p className="text-[9px] text-slate-500 text-center leading-tight shrink-0 px-1">{tab.imageCaption}</p>
         )}
       </div>
     )
