@@ -1,9 +1,23 @@
 import { ImageIcon } from 'lucide-react'
 import type { ShowcaseTab } from './showcaseContent'
 
-function HeroPhoto({ src, caption }: { src: string; caption: string }) {
+const CAPTION_CLASS = 'text-[11px] sm:text-xs text-slate-600 text-center leading-snug px-1 font-medium'
+
+function HeroPhoto({
+  src,
+  caption,
+  tightCaption,
+}: {
+  src: string
+  caption: string
+  tightCaption?: boolean
+}) {
   return (
-    <div className="min-h-0 h-full w-full flex flex-col items-center justify-center overflow-hidden gap-1.5">
+    <div
+      className={`min-h-0 h-full w-full flex flex-col items-center justify-center overflow-hidden ${
+        tightCaption ? 'gap-0.5' : 'gap-1.5'
+      }`}
+    >
       <div className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
         <img
           src={src}
@@ -16,6 +30,8 @@ function HeroPhoto({ src, caption }: { src: string; caption: string }) {
 }
 
 export function ShowcaseHeroSlot({ tab }: { tab: ShowcaseTab }) {
+  const tightCaption = tab.id === 4
+
   if (tab.heroImage) {
     const photos = tab.secondaryPhoto
       ? [
@@ -25,26 +41,26 @@ export function ShowcaseHeroSlot({ tab }: { tab: ShowcaseTab }) {
       : [{ src: tab.heroImage, caption: tab.imageCaption }]
 
     return (
-      <div className="h-full rounded-xl border border-indigo-200 bg-slate-100 flex flex-col overflow-hidden p-3 min-h-[200px] gap-2">
+      <div className={`h-full rounded-xl border border-indigo-200 bg-slate-100 flex flex-col overflow-hidden p-3 min-h-[200px] ${tightCaption ? 'gap-1' : 'gap-2'}`}>
         <div
           className={`w-full flex-1 min-h-0 overflow-hidden grid gap-2 ${
             photos.length > 1 ? 'grid-cols-2' : 'grid-cols-1'
           }`}
         >
           {photos.map((photo) => (
-            <HeroPhoto key={photo.src} src={photo.src} caption={photo.caption} />
+            <HeroPhoto key={photo.src} src={photo.src} caption={photo.caption} tightCaption={tightCaption} />
           ))}
         </div>
         {photos.length > 1 ? (
-          <div className="w-full grid grid-cols-2 gap-2 shrink-0">
+          <div className={`w-full grid grid-cols-2 gap-2 shrink-0 ${tightCaption ? 'mt-0' : ''}`}>
             {photos.map((photo) => (
-              <p key={photo.src} className="text-[9px] text-slate-500 text-center leading-tight px-1">
+              <p key={photo.src} className={CAPTION_CLASS}>
                 {photo.caption}
               </p>
             ))}
           </div>
         ) : (
-          <p className="text-[9px] text-slate-500 text-center leading-tight shrink-0 px-1">{tab.imageCaption}</p>
+          <p className={`${CAPTION_CLASS} shrink-0 ${tightCaption ? 'mt-0' : ''}`}>{tab.imageCaption}</p>
         )}
       </div>
     )

@@ -57,13 +57,19 @@ function ModalPhotoFigure({
   src,
   caption,
   maxHeightClass = 'max-h-[min(240px,32vh)]',
+  tightCaption = false,
 }: {
   src: string
   caption?: string
   maxHeightClass?: string
+  tightCaption?: boolean
 }) {
   return (
-    <figure className="flex flex-col items-center justify-center min-h-0 h-full gap-1.5 overflow-hidden">
+    <figure
+      className={`flex flex-col items-center justify-center min-h-0 h-full overflow-hidden ${
+        tightCaption ? 'gap-0.5' : 'gap-1.5'
+      }`}
+    >
       <div className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
         <img
           src={src}
@@ -72,7 +78,9 @@ function ModalPhotoFigure({
         />
       </div>
       {caption && (
-        <figcaption className="text-[9px] text-slate-500 text-center leading-tight px-1">{caption}</figcaption>
+        <figcaption className="text-[11px] sm:text-xs text-slate-600 text-center leading-snug px-1 font-medium">
+          {caption}
+        </figcaption>
       )}
     </figure>
   )
@@ -81,26 +89,45 @@ function ModalPhotoFigure({
 export function ShowcaseSummaryPanel({ tab, onOpenReport }: SummaryProps) {
   const accent = ACCENT_STYLES[tab.accent]
   const hasModalHeader = Boolean(tab.modalPhoto || tab.modalSecondaryPhoto)
+  const tightCaption = tab.id === 4
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-3 overflow-y-auto">
       {hasModalHeader && (
-        <div className="shrink-0 min-h-[min(220px,32vh)] max-h-[min(320px,38vh)] flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-3 overflow-hidden">
+        <div
+          className={`shrink-0 min-h-[min(220px,32vh)] max-h-[min(320px,38vh)] flex items-center justify-center rounded-xl bg-slate-100 border border-indigo-100 p-3 overflow-hidden ${
+            tightCaption ? 'pb-2' : ''
+          }`}
+        >
           {tab.modalSecondaryPhoto && tab.modalPhoto ? (
             <div className="w-full h-full grid grid-cols-2 gap-3 items-center min-h-0 overflow-hidden">
-              <ModalPhotoFigure src={tab.modalSecondaryPhoto} caption={tab.modalSecondaryPhotoCaption} />
-              <ModalPhotoFigure src={tab.modalPhoto} caption={tab.modalPhotoCaption} />
+              <ModalPhotoFigure
+                src={tab.modalSecondaryPhoto}
+                caption={tab.modalSecondaryPhotoCaption}
+                tightCaption={tightCaption}
+              />
+              <ModalPhotoFigure src={tab.modalPhoto} caption={tab.modalPhotoCaption} tightCaption={tightCaption} />
             </div>
           ) : tab.modalPhoto ? (
-            <ModalPhotoFigure src={tab.modalPhoto} caption={tab.modalPhotoCaption} maxHeightClass="max-h-full" />
+            <ModalPhotoFigure
+              src={tab.modalPhoto}
+              caption={tab.modalPhotoCaption}
+              maxHeightClass="max-h-full"
+              tightCaption={tightCaption}
+            />
           ) : tab.modalSecondaryPhoto ? (
-            <ModalPhotoFigure src={tab.modalSecondaryPhoto} caption={tab.modalSecondaryPhotoCaption} maxHeightClass="max-h-full" />
+            <ModalPhotoFigure
+              src={tab.modalSecondaryPhoto}
+              caption={tab.modalSecondaryPhotoCaption}
+              maxHeightClass="max-h-full"
+              tightCaption={tightCaption}
+            />
           ) : null}
         </div>
       )}
 
       {tab.detailPhoto && (
-        <div className="shrink-0 rounded-xl bg-slate-100 border border-indigo-100 p-3 overflow-hidden">
+        <div className={`shrink-0 rounded-xl bg-slate-100 border border-indigo-100 p-3 overflow-hidden ${tightCaption ? 'pt-2 pb-2' : ''}`}>
           <div className="w-full flex items-center justify-center overflow-hidden max-h-[min(220px,30vh)]">
             <img
               src={tab.detailPhoto}
@@ -109,7 +136,13 @@ export function ShowcaseSummaryPanel({ tab, onOpenReport }: SummaryProps) {
             />
           </div>
           {tab.detailPhotoCaption && (
-            <p className="text-[9px] text-slate-500 text-center leading-tight px-1 mt-2">{tab.detailPhotoCaption}</p>
+            <p
+              className={`text-[11px] sm:text-xs text-slate-600 text-center leading-snug px-1 font-medium ${
+                tightCaption ? 'mt-0.5' : 'mt-2'
+              }`}
+            >
+              {tab.detailPhotoCaption}
+            </p>
           )}
         </div>
       )}

@@ -388,7 +388,7 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     heroImage: '/presentation/bok-shin-ecb-speaking.png',
     secondaryPhoto: '/presentation/bok-governor-slide.png',
     secondaryImageCaption: '이창용 전 총재 · 원화 스테이블코인 국회 발언 (2025.8.19)',
-    modalSecondaryPhoto: '/presentation/bok-shin-ecb-forum.png',
+    modalSecondaryPhoto: '/presentation/bok-hangang-ecb-slide.png',
     modalSecondaryPhotoCaption: '2026년 7월 ECB 포럼 : 신현송 총재 토큰화 발표',
     modalPhoto: '/presentation/bok-governor-news.png',
     modalPhotoCaption: '이창용 전 총재 · 디지털 화폐·스테이블코인 관련 보도 (2025)',
