@@ -10,6 +10,8 @@ export const PRODUCER_LEDGER_ABI = [
   'function getStats(address producer) view returns (uint256 totalProducedWh, uint256 totalSoldWh, uint256 availableWh, uint256 lastUpdate, uint256 rate)',
   'function purchaseEnergy(address producer, uint256 whAmount)',
   'function setRate(uint256 rate)',
+  'function setRateFor(address producer, uint256 rate)',
+  'function owner() view returns (address)',
   'function ratePerKwh(address producer) view returns (uint256)',
 ] as const
 

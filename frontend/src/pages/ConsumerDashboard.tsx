@@ -184,22 +184,18 @@ export default function ConsumerDashboard({ wallet }: Props) {
             )
           }
         }
-      } else {
-        const priceRes = await fetch(api(`supplier/price/${supplierWallet}`))
-        if (priceRes.ok) {
-          const priceData = await priceRes.json()
-          const onChain = Number(priceData.onChainRate)
-          if (onChain <= 0) {
-            throw new Error(
-              '공급자 단가가 P2P 원장에 등록되지 않았습니다. 컨트랙트 owner가 setRateFor로 단가를 설정해야 합니다.',
-            )
-          }
-        }
       }
       return wallet.purchaseProducerEnergy(totalWh, supplierWallet)
     },
     [isCustomMode, confirmedP2pWallet, wallet],
   )
+
+  useEffect(() => {
+    if (!wallet.isConnected || !wallet.isCorrectNetwork) return
+    wallet.ensurePresetLedgerRates().catch(() => {
+      // owner가 아니면 무시
+    })
+  }, [wallet.isConnected, wallet.isCorrectNetwork, wallet.address, wallet.ensurePresetLedgerRates])
 
   return (
     <>

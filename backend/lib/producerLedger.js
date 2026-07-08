@@ -7,6 +7,8 @@ const PRODUCER_LEDGER_ABI = [
   'event EnergySold(address indexed producer, address indexed buyer, uint256 soldWh, uint256 cumulativeSoldWh, uint256 wonPaid, uint256 timestamp)',
   'function getStats(address producer) view returns (uint256 totalProducedWh, uint256 totalSoldWh, uint256 availableWh, uint256 lastUpdate, uint256 rate)',
   'function ratePerKwh(address producer) view returns (uint256)',
+  'function setRateFor(address producer, uint256 rate)',
+  'function owner() view returns (address)',
 ];
 
 module.exports = {

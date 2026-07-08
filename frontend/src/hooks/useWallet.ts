@@ -257,6 +257,36 @@ export function useWallet() {
     return receipt.hash
   }, [state.isConnected])
 
+  /** 원장 owner 지갑 — 제주(150)·혼합(100) 프리셋 단가 자동 등록 */
+  const ensurePresetLedgerRates = useCallback(async (): Promise<boolean> => {
+    if (!state.isConnected) return false
+
+    const eip1193 = requireProvider()
+    const provider = new BrowserProvider(eip1193)
+    const signer = await provider.getSigner()
+    const ledger = new Contract(getAddress(PRODUCER_LEDGER_ADDRESS), PRODUCER_LEDGER_ABI, signer)
+    const owner = await ledger.owner()
+    const me = await signer.getAddress()
+    if (owner.toLowerCase() !== me.toLowerCase()) return false
+
+    const feeData = await provider.getFeeData()
+    const gasOpts = {
+      maxFeePerGas: feeData.maxFeePerGas ? (feeData.maxFeePerGas * 150n) / 100n : undefined,
+      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ? (feeData.maxPriorityFeePerGas * 150n) / 100n : undefined,
+    }
+
+    let changed = false
+    for (const s of Object.values(SUPPLIERS)) {
+      const producer = getAddress(s.wallet)
+      const current: bigint = await ledger.ratePerKwh(producer)
+      if (current > 0n) continue
+      const tx = await ledger.setRateFor(producer, s.rate, gasOpts)
+      await tx.wait()
+      changed = true
+    }
+    return changed
+  }, [state.isConnected])
+
   const purchaseProducerEnergy = useCallback(async (
     whAmount: number,
     producerWallet: string,
@@ -278,9 +308,18 @@ export function useWallet() {
     }
 
     const ledger = new Contract(getAddress(PRODUCER_LEDGER_ADDRESS), PRODUCER_LEDGER_ABI, signer)
-    const rate = await ledger.ratePerKwh(producer)
+    let rate: bigint = await ledger.ratePerKwh(producer)
     if (rate === 0n) {
-      throw new Error('생산자 단가가 온체인에 없습니다. 생산자 탭에서 지갑 연결 후 단가를 저장해 주세요.')
+      const owner = await ledger.owner()
+      if (owner.toLowerCase() === buyer.toLowerCase()) {
+        await ensurePresetLedgerRates()
+        rate = await ledger.ratePerKwh(producer)
+      }
+    }
+    if (rate === 0n) {
+      throw new Error(
+        '공급자 단가가 P2P 원장에 없습니다. 원장 배포 지갑(0x7fa8…)으로 MetaMask 연결 후 한 번 정산을 시도하거나, owner가 setRateFor를 실행해야 합니다.',
+      )
     }
 
     const wonCost = (whInt * rate * 10n ** 18n) / 1000n
@@ -315,7 +354,7 @@ export function useWallet() {
       }
       throw err
     }
-  }, [state.isConnected])
+  }, [state.isConnected, ensurePresetLedgerRates])
 
   const setProducerRateOnChain = useCallback(async (rate: number): Promise<string> => {
     if (!state.isConnected) {
@@ -403,6 +442,7 @@ export function useWallet() {
     disconnect,
     transferWon,
     purchaseProducerEnergy,
+    ensurePresetLedgerRates,
     setProducerRateOnChain,
   }
 }

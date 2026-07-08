@@ -43,6 +43,9 @@ const DEFAULT_SUPPLIERS = [
   '0x0C6F6f9FA1BB851AeF9e08c57E4E2a9820858D8e',
 ];
 
+const { getPresetRate } = require('./lib/presetSuppliers');
+const { bootstrapPresetLedgerRates } = require('./lib/bootstrapLedgerRates');
+
 const blockTimestampCache = new Map();
 
 async function getBlockTimestamp(blockNumber) {
@@ -636,9 +639,11 @@ app.get('/api/supplier/price/:wallet', async (req, res) => {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
   let price = supplierPrices[wallet];
+  const presetRate = getPresetRate(wallet);
+  if (price === undefined && presetRate !== undefined) price = presetRate;
   const onChainRate = await getOnChainProducerRate(wallet);
   if (onChainRate > 0) price = onChainRate;
-  if (price === undefined) price = 150;
+  if (price === undefined) price = presetRate ?? 150;
   res.json({ wallet, price, onChainRate });
 });
 
@@ -683,6 +688,23 @@ app.get('/api/energy/network', async (req, res) => {
 
 app.get('/', (req, res) => res.send('✅ Real Web3 Backend is running!'));
 
+async function tryBootstrapLedgerRatesOnStartup() {
+  const key = process.env.LEDGER_OWNER_PRIVATE_KEY;
+  if (!key) {
+    console.log('ℹ LEDGER_OWNER_PRIVATE_KEY 없음 — 프리셋 단가 자동 등록 스킵 (MetaMask owner 연결 시 프론트에서 등록 가능)');
+    return;
+  }
+  try {
+    const wallet = new ethers.Wallet(key, provider);
+    console.log('🔧 프리셋 공급자 원장 단가 등록 시도…', wallet.address);
+    const result = await bootstrapPresetLedgerRates(wallet);
+    console.log('🔧 원장 단가 bootstrap:', result);
+  } catch (err) {
+    console.warn('⚠ 원장 단가 bootstrap 실패:', err.message);
+  }
+}
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Independent Web3 Backend running on port ${PORT}`);
+  tryBootstrapLedgerRatesOnStartup();
 });
