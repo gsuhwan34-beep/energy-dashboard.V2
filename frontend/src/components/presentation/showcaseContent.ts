@@ -329,7 +329,8 @@ export const SHOWCASE_TABS: ShowcaseTab[] = [
     tagline: '무결점 Oracle · 국가 AI',
     shortDesc:
       '위변조가 불가능한 초 단위 계측 데이터를 통해, 국가 전력망 관리와 AI 학습을 위한 고부가가치 자산을 생산합니다.',
-    imageCaption: '무결점 Oracle 데이터 · AI 학습',
+    imageCaption: '데이터 자산화 · Data Valuation',
+    heroImage: '/presentation/data-asset-valuation.png',
     detailTitle: '고품질 전력 데이터 자산화 (Data Capital)',
     summaryBullets: [
       {
