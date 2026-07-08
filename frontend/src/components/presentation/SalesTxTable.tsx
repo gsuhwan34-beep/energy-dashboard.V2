@@ -15,7 +15,7 @@ export default function SalesTxTable({ title, sales }: Props) {
       <div className="px-3 py-2 border-b border-white/10 shrink-0 space-y-2">
         <h4 className="text-sm font-bold text-white">{title}</h4>
         <p className="text-[10px] text-white/45">
-          결제 지갑(MetaMask)과 계량기 지갑(IoT)을 분리 표시합니다.
+          purchaseEnergy 정산 시 MetaMask로 결제한 지갑 주소입니다.
         </p>
         <OnChainExplainer />
       </div>
@@ -28,7 +28,6 @@ export default function SalesTxTable({ title, sales }: Props) {
               <tr>
                 <th className="px-2 py-1.5 text-left font-medium">정산 주차</th>
                 <th className="px-2 py-1.5 text-left font-medium">결제 지갑</th>
-                <th className="px-2 py-1.5 text-left font-medium">계량기 지갑</th>
                 <th className="px-2 py-1.5 text-right font-medium">kWh</th>
                 <th className="px-2 py-1.5 text-right font-medium">WON</th>
                 <th className="px-2 py-1.5 text-right font-medium">단가</th>
@@ -40,9 +39,6 @@ export default function SalesTxTable({ title, sales }: Props) {
                 <tr key={s.txHash} className="hover:bg-white/5">
                   <td className="px-2 py-2 text-white/80 whitespace-nowrap">{s.weekLabel}</td>
                   <td className="px-2 py-2 font-mono text-white/70">{shortAddr(s.buyerWallet ?? s.from)}</td>
-                  <td className="px-2 py-2 font-mono text-white/70">
-                    {s.meterWallet ? shortAddr(s.meterWallet) : '—'}
-                  </td>
                   <td className="px-2 py-2 text-right text-emerald-300 font-semibold">{s.kWh.toFixed(4)}</td>
                   <td className="px-2 py-2 text-right text-white font-semibold">{s.wonAmount.toFixed(2)}</td>
                   <td className="px-2 py-2 text-right text-white/60">{s.ratePerKwh}</td>

@@ -30,7 +30,6 @@ export default function SettlementTxTable({ title, rows, emptyText = '검증된 
                 <th className="px-2 py-1.5 text-right font-medium">WON</th>
                 <th className="px-2 py-1.5 text-right font-medium">단가</th>
                 <th className="px-2 py-1.5 text-left font-medium">결제 지갑</th>
-                <th className="px-2 py-1.5 text-left font-medium">계량기 지갑</th>
                 <th className="px-2 py-1.5 text-left font-medium">공급자</th>
                 <th className="px-2 py-1.5 text-left font-medium">Tx</th>
               </tr>
@@ -55,9 +54,6 @@ export default function SettlementTxTable({ title, rows, emptyText = '검증된 
                   </td>
                   <td className="px-2 py-2 font-mono text-white/70">
                     {r.buyerWallet ? shortAddr(r.buyerWallet) : '—'}
-                  </td>
-                  <td className="px-2 py-2 font-mono text-white/70">
-                    {r.meterWallet ? shortAddr(r.meterWallet) : '—'}
                   </td>
                   <td className="px-2 py-2 font-mono text-white/70">
                     {shortAddr(r.supplierWallet)}
