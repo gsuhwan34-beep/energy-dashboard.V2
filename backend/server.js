@@ -120,6 +120,41 @@ async function fetchProducerProductions(producer) {
   return { productions, meterTotalWh };
 }
 
+/** P2P 원장 EnergySold 전체 (계량기↔soldWh 매칭용) */
+async function fetchAllLedgerPurchases() {
+  try {
+    const filter = producerLedgerContract.filters.EnergySold();
+    const logs = await producerLedgerContract.queryFilter(filter, START_BLOCK, 'latest');
+
+    const transfers = [];
+    for (const log of logs) {
+      const producer = ethers.getAddress(log.args.producer ?? log.args[0]);
+      const buyer = ethers.getAddress(log.args.buyer ?? log.args[1]);
+      const soldWh = Number(log.args.soldWh ?? log.args[2]);
+      const wonPaid = Number(ethers.formatUnits(log.args.wonPaid ?? log.args[4], 18));
+      let timestamp = Number(log.args.timestamp ?? log.args[5]);
+      if (!timestamp) timestamp = await getBlockTimestamp(log.blockNumber);
+
+      transfers.push({
+        txHash: log.transactionHash,
+        blockNumber: log.blockNumber,
+        timestamp,
+        from: buyer,
+        to: producer,
+        wonAmount: wonPaid,
+        soldWh,
+        source: 'ledger',
+      });
+    }
+
+    transfers.sort((a, b) => a.timestamp - b.timestamp);
+    return transfers;
+  } catch (err) {
+    console.warn('Ledger all purchases skipped:', err.message);
+    return [];
+  }
+}
+
 /** P2P 원장 purchaseEnergy → EnergySold (구매자 기준 — 생산자 탭과 무관하게 조회) */
 async function fetchLedgerPurchasesByBuyer(buyerFilter) {
   try {
@@ -335,7 +370,7 @@ async function buildProducerPayload(producer) {
 
 const fs = require('fs');
 const path = require('path');
-const { findMeterVerifiedTransfers } = require('./lib/settlementMatch');
+const { findMeterVerifiedTransfers, findLedgerPurchasesForMeter } = require('./lib/settlementMatch');
 
 const SUPPLIER_PRICES_FILE = path.join(__dirname, 'supplier-prices.json');
 let supplierPrices = {};
@@ -438,11 +473,29 @@ app.get('/api/energy/settlements', async (req, res) => {
     // 주간 정산 UI — P2P 원장 EnergySold만 (배포 전 WON 송금 제외)
     if (ledgerOnly && isValidAddress(consumerParam)) {
       const consumer = ethers.getAddress(consumerParam);
-      const ledgerPurchases = await fetchLedgerPurchasesByBuyer(consumer);
-      ledgerPurchases.sort((a, b) => a.timestamp - b.timestamp);
+      const seenTx = new Set();
+      const transfers = [];
+
+      function addTransfer(t) {
+        if (seenTx.has(t.txHash)) return;
+        seenTx.add(t.txHash);
+        transfers.push(t);
+      }
+
+      const buyerPurchases = await fetchLedgerPurchasesByBuyer(consumer);
+      buyerPurchases.forEach(addTransfer);
+
+      const readings = await fetchConsumerReadings(consumer);
+      if (readings.length > 0) {
+        const allLedger = await fetchAllLedgerPurchases();
+        const meterMatched = findLedgerPurchasesForMeter(readings, allLedger);
+        meterMatched.forEach(addTransfer);
+      }
+
+      transfers.sort((a, b) => a.timestamp - b.timestamp);
       return res.json({
         wonToken: WON_ADDRESS,
-        transfers: ledgerPurchases,
+        transfers,
       });
     }
 

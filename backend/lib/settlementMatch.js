@@ -39,6 +39,11 @@ function amountsMatch(expected, actual) {
   return diff <= Math.max(0.01, expected * 0.05);
 }
 
+function whAmountsMatch(expectedWh, actualWh) {
+  if (expectedWh <= 0) return actualWh <= 1;
+  return Math.abs(expectedWh - actualWh) <= Math.max(1, expectedWh * 0.08);
+}
+
 function paymentMatchesWeekEnergy(weekKWh, wonAmount, extraRates) {
   if (weekKWh <= 0) return wonAmount <= 0.01;
 
@@ -201,9 +206,51 @@ function findMeterVerifiedTransfers(readings, candidateTransfers, extraRates = [
   return matched;
 }
 
+/**
+ * 계량기 주차별 Wh와 원장 soldWh가 맞는 EnergySold만 반환.
+ * 결제 지갑(MetaMask) ≠ 계량기 지갑이어도 정산됨으로 인정.
+ */
+function findLedgerPurchasesForMeter(readings, ledgerTransfers) {
+  if (!readings?.length || !ledgerTransfers?.length) return [];
+
+  const weeks = groupReadingsByWeek(readings)
+    .filter((w) => !w.isCurrent && w.totalWh > 0)
+    .sort((a, b) => a.weekIndex - b.weekIndex);
+
+  const usedTx = new Set();
+  const matched = [];
+
+  for (const week of weeks) {
+    let best = null;
+    let bestScore = Infinity;
+
+    for (const t of ledgerTransfers) {
+      if (usedTx.has(t.txHash)) continue;
+      const soldWh = Number(t.soldWh);
+      if (!Number.isFinite(soldWh) || soldWh <= 0) continue;
+      if (!whAmountsMatch(week.totalWh, soldWh)) continue;
+
+      const score = Math.abs(week.totalWh - soldWh);
+      if (score < bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+
+    if (best) {
+      matched.push(best);
+      usedTx.add(best.txHash);
+    }
+  }
+
+  return matched;
+}
+
 module.exports = {
   matchVerifiedProducerSales,
   findMeterVerifiedTransfers,
+  findLedgerPurchasesForMeter,
   groupReadingsByWeek,
   getWeekIndex,
+  whAmountsMatch,
 };
