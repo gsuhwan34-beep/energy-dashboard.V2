@@ -16,7 +16,7 @@ const ROLE_SUBTITLE: Record<AppRole, string> = {
 }
 
 export default function App() {
-  const [role, setRole] = useState<AppRole>('consumer')
+  const [role, setRole] = useState<AppRole>('presentation')
   const wallet = useWallet()
   const isPresentation = role === 'presentation'
 
