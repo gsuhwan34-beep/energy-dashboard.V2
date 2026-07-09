@@ -12,10 +12,10 @@ import TransactionTable from '../components/TransactionTable'
 import WeeklySettlement from '../components/WeeklySettlement'
 import { Zap, Search, AlertCircle, CheckCircle2, Settings } from 'lucide-react'
 import { api } from '../lib/api'
-import { writeStoredWallet, STORAGE_CONSUMER_WALLET, STORAGE_SUPPLIER_RATE, STORAGE_PAYER_WALLET, resolvePayerWallets } from '../lib/presentation'
+import { writeStoredWallet, STORAGE_CONSUMER_WALLET, STORAGE_SUPPLIER_RATE, STORAGE_PAYER_WALLET, resolvePayerWallets, DEMO_CONSUMER_WALLET } from '../lib/presentation'
 import { sortReadings, getTotalWh, getLatestReading } from '../lib/readingDelta'
 
-const DEFAULT_WALLET = '0x6220F267AEDfB782d8aDD9D13AAB3f5B51c0b3c5'
+const DEFAULT_WALLET = DEMO_CONSUMER_WALLET
 
 type WalletHook = ReturnType<typeof useWallet>
 
