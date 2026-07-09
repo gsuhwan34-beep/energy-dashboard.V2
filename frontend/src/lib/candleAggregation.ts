@@ -24,11 +24,11 @@ const D = 24 * H
 
 export const MAX_NAV_HISTORY_MS = 90 * D
 
-/** 전송별(tick) 기본 뷰에 보일 막대 개수 — 1분 주기 전송 시 겹침 방지 */
-const TARGET_VISIBLE_TICK_BARS = 20
+/** 전송별(tick) — 항상 최근 20분 구간 */
+export const TICK_WINDOW_MS = 20 * 60 * 1000
 
 export const DEFAULT_WINDOW_MS: Record<CandleInterval, number> = {
-  tick: 30 * 60 * 1000,
+  tick: TICK_WINDOW_MS,
   '15m': 12 * H,
   '30m': 24 * H,
   '1h': 48 * H,
@@ -114,17 +114,20 @@ export function getNavExtent(bars: VolumeBar[]): NavExtent {
   return { navStartMs, navEndMs }
 }
 
+/** 실시간(최근 전송)이면 지금, 과거 기록만 있으면 마지막 전송 시각 기준 */
+export function tickViewEndMs(bars: VolumeBar[]): number {
+  if (!bars.length) return Date.now()
+  const lastBar = bars[bars.length - 1].time
+  const isLive = Date.now() - lastBar <= TICK_WINDOW_MS * 2
+  return isLive ? Date.now() : lastBar
+}
+
 export function defaultTimeView(interval: CandleInterval, extent: NavExtent, bars: VolumeBar[]): TimeView {
-  if (interval === 'tick' && bars.length >= 2) {
-    const sample = bars.slice(-Math.min(bars.length, 12))
-    const gaps = sample.slice(1).map((b, i) => b.time - sample[i].time)
-    const sorted = [...gaps].sort((a, b) => a - b)
-    const medianGap = sorted[Math.floor(sorted.length / 2)] || 60_000
-    const windowMs = Math.max(
-      MIN_VIEW_MS,
-      Math.min(DEFAULT_WINDOW_MS.tick, medianGap * TARGET_VISIBLE_TICK_BARS),
-    )
-    return { viewEndMs: extent.navEndMs, windowMs }
+  if (interval === 'tick') {
+    return {
+      viewEndMs: tickViewEndMs(bars),
+      windowMs: TICK_WINDOW_MS,
+    }
   }
 
   return {

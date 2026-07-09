@@ -21,6 +21,7 @@ import {
   zoomInView,
   zoomOutView,
   expandWindowView,
+  TICK_WINDOW_MS,
 } from '../lib/candleAggregation'
 import { sortReadings } from '../lib/readingDelta'
 
@@ -132,17 +133,22 @@ export default function EnergyChart({
     prevBarCountRef.current = rawBars.length
   }, [rawBars.length, lastReadingTs, interval, extent, rawBars, applyDefaultView])
 
-  /** 사용자가 팬/줌하지 않았으면 1분마다 「지금」 기준으로 창 이동 */
+  /** 실시간 전송 중이면 1분마다 「지금」 기준 20분 창 이동 */
   useEffect(() => {
-    if (!rawBars.length) return
+    if (!rawBars.length || interval !== 'tick') return
     const id = setInterval(() => {
       if (userControlledView.current) return
+      const lastBar = rawBars[rawBars.length - 1].time
+      if (Date.now() - lastBar > TICK_WINDOW_MS * 2) return
       setTimeView((prev) =>
-        clampTimeView({ viewEndMs: Date.now(), windowMs: prev.windowMs }, getNavExtent(rawBars)),
+        clampTimeView(
+          { viewEndMs: Date.now(), windowMs: TICK_WINDOW_MS },
+          getNavExtent(rawBars),
+        ),
       )
     }, 60_000)
     return () => clearInterval(id)
-  }, [rawBars])
+  }, [rawBars, interval])
 
   useEffect(() => {
     if (!isExpanded) return
@@ -274,8 +280,8 @@ export default function EnergyChart({
       },
       xAxis: {
         type: 'time',
-        min: extent.navStartMs,
-        max: extent.navEndMs,
+        min: interval === 'tick' ? startMs : extent.navStartMs,
+        max: interval === 'tick' ? endMs : extent.navEndMs,
         axisLine: { lineStyle: { color: '#7a7a7a' } },
         axisLabel: { color: fgSubtle, fontSize: 9 },
         axisTick: { show: false },
@@ -298,7 +304,7 @@ export default function EnergyChart({
           moveOnMouseMove: true,
           moveOnMouseWheel: false,
           preventDefaultMouseMove: true,
-          minValueSpan: 15 * 60 * 1000,
+          minValueSpan: interval === 'tick' ? TICK_WINDOW_MS : 15 * 60 * 1000,
           startValue: startMs,
           endValue: endMs,
         },
@@ -315,7 +321,7 @@ export default function EnergyChart({
         },
       ],
     }
-  }, [seriesBars, extent.navEndMs, extent.navStartMs, hasData, startMs, endMs, volumeLabel])
+  }, [seriesBars, extent.navEndMs, extent.navStartMs, hasData, startMs, endMs, volumeLabel, interval])
 
   const chartHeight = isExpanded ? EXPANDED_CHART_H : NORMAL_CHART_H
 

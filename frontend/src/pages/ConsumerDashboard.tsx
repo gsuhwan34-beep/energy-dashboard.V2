@@ -328,6 +328,7 @@ export default function ConsumerDashboard({ wallet }: Props) {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <div className="lg:col-span-2 space-y-4">
               <EnergyChart
+                key={activeWallet}
                 readings={readings}
                 readingsAreDelta
                 cumulativeBadge={{
