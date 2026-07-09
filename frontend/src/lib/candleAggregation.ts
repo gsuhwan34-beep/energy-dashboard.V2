@@ -127,8 +127,10 @@ export function tickViewEndMs(bars: VolumeBar[]): number {
 
 export function defaultTimeView(interval: CandleInterval, extent: NavExtent, bars: VolumeBar[]): TimeView {
   if (interval === 'tick') {
+    const end = tickViewEndMs(bars)
+    const viewEndMs = Math.ceil(end / TICK_SLOT_MS) * TICK_SLOT_MS
     return {
-      viewEndMs: tickViewEndMs(bars),
+      viewEndMs,
       windowMs: TICK_WINDOW_MS,
     }
   }
@@ -155,16 +157,21 @@ export function getViewRange(view: TimeView): { startMs: number; endMs: number }
   return { startMs: view.viewEndMs - view.windowMs, endMs: view.viewEndMs }
 }
 
-/** 전송별 — 보이는 구간을 고정 간격 슬롯으로 채워 막대 간격 균등 */
+/** 전송별 — 보이는 구간을 1분 슬롯으로 고정 개수 채움 (막대 간격 균등) */
 export function barsForTickView(
   rawBars: VolumeBar[],
   viewStartMs: number,
   viewEndMs: number,
   slotMs = TICK_SLOT_MS,
 ): VolumeBar[] {
+  const spanMs = Math.max(slotMs, viewEndMs - viewStartMs)
+  const slotCount = Math.max(1, Math.floor(spanMs / slotMs) + 1)
+  const end = floorTime(viewEndMs, slotMs)
+  const start = end - (slotCount - 1) * slotMs
+
   const map = new Map<number, VolumeBar>()
   for (const b of rawBars) {
-    if (b.time < viewStartMs || b.time > viewEndMs) continue
+    if (b.time < start - slotMs || b.time > end + slotMs) continue
     const slot = floorTime(b.time, slotMs)
     const existing = map.get(slot)
     if (existing) {
@@ -179,11 +186,9 @@ export function barsForTickView(
   }
 
   const result: VolumeBar[] = []
-  let t = floorTime(viewStartMs, slotMs)
-  const end = floorTime(viewEndMs, slotMs)
-  while (t <= end) {
+  for (let i = 0; i < slotCount; i++) {
+    const t = start + i * slotMs
     result.push(map.get(t) ?? { time: t, volume: 0, count: 0 })
-    t += slotMs
   }
   return result
 }

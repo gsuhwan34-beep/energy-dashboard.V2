@@ -84,6 +84,27 @@ function formatAxisRange(startMs: number, endMs: number): string {
   return `${fmt(startMs)} ~ ${fmt(endMs)}`
 }
 
+function formatTickAxisLabel(ms: number): string {
+  return new Date(ms).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function buildTickTooltipHtml(b: VolumeBar, volLabel: string): string {
+  const timeStr = new Date(b.time).toLocaleString('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  if (b.volume === 0 && b.count === 0) {
+    return `<div style="font-weight:600">${timeStr}</div><div style="font-size:11px;color:${fgSubtle}">기록 없음</div>`
+  }
+  return (
+    `<div style="font-weight:600;margin-bottom:6px">${timeStr}</div>` +
+    `<div>${volLabel} <b>${b.volume.toLocaleString()}</b> Wh</div>` +
+    `<div style="font-size:11px;color:${fgSubtle};margin-top:4px">${b.count}회</div>`
+  )
+}
+
 export default function EnergyChart({
   readings,
   cumulativeBadge,
@@ -234,21 +255,78 @@ export default function EnergyChart({
   const option = useMemo((): EChartsOption => {
     if (!hasData) return {}
 
+    const tooltipBase = {
+      trigger: 'axis' as const,
+      axisPointer: { type: 'shadow' as const },
+      backgroundColor: tooltipBg,
+      borderColor: tooltipBorder,
+      borderWidth: 1,
+      padding: [8, 12] as [number, number],
+      textStyle: { color: fgBase, fontSize: 12 },
+      extraCssText: 'border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);',
+    }
+
+    const yAxis: EChartsOption['yAxis'] = {
+      type: 'value',
+      name: 'Wh',
+      nameTextStyle: { color: fgSubtle, fontSize: 10 },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: fgSubtle, fontSize: 10 },
+      splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } },
+    }
+
+    const grid = { left: 56, right: 16, top: 20, bottom: 36, containLabel: true }
+
+    if (interval === 'tick') {
+      const categories = seriesBars.map((b) => formatTickAxisLabel(b.time))
+      const labelStep = Math.max(1, Math.ceil(categories.length / 8))
+
+      return {
+        animation: false,
+        grid,
+        tooltip: {
+          ...tooltipBase,
+          formatter(params: unknown) {
+            const list = (Array.isArray(params) ? params : [params]) as Array<{ dataIndex?: number }>
+            const idx = list[0]?.dataIndex ?? 0
+            const b = seriesBars[idx]
+            return b ? buildTickTooltipHtml(b, volumeLabel) : ''
+          },
+        },
+        xAxis: {
+          type: 'category',
+          data: categories,
+          boundaryGap: true,
+          axisLine: { lineStyle: { color: '#7a7a7a' } },
+          axisLabel: {
+            color: fgSubtle,
+            fontSize: 9,
+            interval: (index: number) => index % labelStep === 0,
+          },
+          axisTick: { show: false },
+        },
+        yAxis,
+        series: [
+          {
+            name: volumeLabel,
+            type: 'bar',
+            data: seriesBars.map((b) => (b.volume > 0 ? b.volume : null)),
+            itemStyle: { color: barColor },
+            barWidth: '65%',
+          },
+        ],
+      }
+    }
+
     const barData = seriesBars.map((b) => [b.time, b.volume])
     const barIndexByTime = new Map(seriesBars.map((b, i) => [b.time, i]))
 
     return {
       animation: false,
-      grid: { left: 56, right: 16, top: 20, bottom: 36, containLabel: true },
+      grid,
       tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        backgroundColor: tooltipBg,
-        borderColor: tooltipBorder,
-        borderWidth: 1,
-        padding: [8, 12],
-        textStyle: { color: fgBase, fontSize: 12 },
-        extraCssText: 'border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);',
+        ...tooltipBase,
         formatter(params: unknown) {
           const list = (Array.isArray(params) ? params : [params]) as Array<{
             dataIndex?: number
@@ -259,46 +337,18 @@ export default function EnergyChart({
           const t = item?.value?.[0]
           if (t != null && barIndexByTime.has(t)) idx = barIndexByTime.get(t)!
           const b = seriesBars[idx]
-          if (!b) return ''
-          const timeStr = new Date(b.time).toLocaleString('ko-KR', {
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-          if (b.volume === 0 && b.count === 0) {
-            return `<div style="font-weight:600">${timeStr}</div><div style="font-size:11px;color:${fgSubtle}">기록 없음</div>`
-          }
-          return (
-            `<div style="font-weight:600;margin-bottom:6px">${timeStr}</div>` +
-            `<div>${volumeLabel} <b>${b.volume.toLocaleString()}</b> Wh</div>` +
-            `<div style="font-size:11px;color:${fgSubtle};margin-top:4px">${b.count}회</div>`
-          )
+          return b ? buildTickTooltipHtml(b, volumeLabel) : ''
         },
       },
       xAxis: {
         type: 'time',
-        min: interval === 'tick' ? startMs : extent.navStartMs,
-        max: interval === 'tick' ? endMs : extent.navEndMs,
+        min: extent.navStartMs,
+        max: extent.navEndMs,
         axisLine: { lineStyle: { color: '#7a7a7a' } },
         axisLabel: { color: fgSubtle, fontSize: 9 },
         axisTick: { show: false },
-        ...(interval === 'tick'
-          ? {
-              minInterval: TICK_WINDOW_MS / 20,
-              maxInterval: TICK_WINDOW_MS / 4,
-            }
-          : {}),
       },
-      yAxis: {
-        type: 'value',
-        name: 'Wh',
-        nameTextStyle: { color: fgSubtle, fontSize: 10 },
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { color: fgSubtle, fontSize: 10 },
-        splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } },
-      },
+      yAxis,
       dataZoom: [
         {
           type: 'inside',
@@ -308,7 +358,7 @@ export default function EnergyChart({
           moveOnMouseMove: true,
           moveOnMouseWheel: false,
           preventDefaultMouseMove: true,
-          minValueSpan: interval === 'tick' ? TICK_WINDOW_MS : 15 * 60 * 1000,
+          minValueSpan: 15 * 60 * 1000,
           startValue: startMs,
           endValue: endMs,
         },
@@ -320,9 +370,8 @@ export default function EnergyChart({
           data: barData,
           clip: true,
           itemStyle: { color: barColor },
-          barMinWidth: interval === 'tick' ? 4 : BAR_MIN_WIDTH,
-          barMaxWidth: interval === 'tick' ? 22 : BAR_MAX_WIDTH,
-          barGap: interval === 'tick' ? '25%' : undefined,
+          barMinWidth: BAR_MIN_WIDTH,
+          barMaxWidth: BAR_MAX_WIDTH,
         },
       ],
     }
