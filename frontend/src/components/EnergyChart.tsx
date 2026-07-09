@@ -162,13 +162,11 @@ export default function EnergyChart({
   const clampedView = useMemo(() => clampTimeView(timeView, extent), [timeView, extent])
   const { startMs, endMs } = useMemo(() => getViewRange(clampedView), [clampedView])
 
-  /** 틱: 보이는 구간만. 집계: 보이는 구간 버킷 채움 */
-  const seriesBars = useMemo(() => {
-    if (interval === 'tick') {
-      return rawBars.filter((b) => b.time >= startMs && b.time <= endMs)
-    }
-    return barsForView(rawBars, interval, startMs, endMs)
-  }, [rawBars, interval, startMs, endMs])
+  /** tick·집계 모두 barsForView — tick은 1분 슬롯 균등 배치 */
+  const seriesBars = useMemo(
+    () => barsForView(rawBars, interval, startMs, endMs),
+    [rawBars, interval, startMs, endMs],
+  )
 
   const visibleHasBars = seriesBars.some((b) => b.volume > 0)
   const lastBarTime = rawBars.length ? rawBars[rawBars.length - 1].time : null
@@ -285,6 +283,12 @@ export default function EnergyChart({
         axisLine: { lineStyle: { color: '#7a7a7a' } },
         axisLabel: { color: fgSubtle, fontSize: 9 },
         axisTick: { show: false },
+        ...(interval === 'tick'
+          ? {
+              minInterval: TICK_WINDOW_MS / 20,
+              maxInterval: TICK_WINDOW_MS / 4,
+            }
+          : {}),
       },
       yAxis: {
         type: 'value',
@@ -316,8 +320,9 @@ export default function EnergyChart({
           data: barData,
           clip: true,
           itemStyle: { color: barColor },
-          barMinWidth: BAR_MIN_WIDTH,
-          barMaxWidth: BAR_MAX_WIDTH,
+          barMinWidth: interval === 'tick' ? 4 : BAR_MIN_WIDTH,
+          barMaxWidth: interval === 'tick' ? 22 : BAR_MAX_WIDTH,
+          barGap: interval === 'tick' ? '25%' : undefined,
         },
       ],
     }

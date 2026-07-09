@@ -27,6 +27,9 @@ export const MAX_NAV_HISTORY_MS = 90 * D
 /** 전송별(tick) — 항상 최근 20분 구간 */
 export const TICK_WINDOW_MS = 20 * 60 * 1000
 
+/** 전송별 1분 슬롯 — 막대 균등 배치 */
+export const TICK_SLOT_MS = 60 * 1000
+
 export const DEFAULT_WINDOW_MS: Record<CandleInterval, number> = {
   tick: TICK_WINDOW_MS,
   '15m': 12 * H,
@@ -152,6 +155,39 @@ export function getViewRange(view: TimeView): { startMs: number; endMs: number }
   return { startMs: view.viewEndMs - view.windowMs, endMs: view.viewEndMs }
 }
 
+/** 전송별 — 보이는 구간을 고정 간격 슬롯으로 채워 막대 간격 균등 */
+export function barsForTickView(
+  rawBars: VolumeBar[],
+  viewStartMs: number,
+  viewEndMs: number,
+  slotMs = TICK_SLOT_MS,
+): VolumeBar[] {
+  const map = new Map<number, VolumeBar>()
+  for (const b of rawBars) {
+    if (b.time < viewStartMs || b.time > viewEndMs) continue
+    const slot = floorTime(b.time, slotMs)
+    const existing = map.get(slot)
+    if (existing) {
+      map.set(slot, {
+        time: slot,
+        volume: Number((existing.volume + b.volume).toFixed(4)),
+        count: existing.count + b.count,
+      })
+    } else {
+      map.set(slot, { time: slot, volume: b.volume, count: b.count })
+    }
+  }
+
+  const result: VolumeBar[] = []
+  let t = floorTime(viewStartMs, slotMs)
+  const end = floorTime(viewEndMs, slotMs)
+  while (t <= end) {
+    result.push(map.get(t) ?? { time: t, volume: 0, count: 0 })
+    t += slotMs
+  }
+  return result
+}
+
 export function barsForView(
   rawBars: VolumeBar[],
   interval: CandleInterval,
@@ -159,7 +195,7 @@ export function barsForView(
   viewEndMs: number,
 ): VolumeBar[] {
   if (interval === 'tick') {
-    return rawBars.filter((b) => b.time >= viewStartMs && b.time <= viewEndMs)
+    return barsForTickView(rawBars, viewStartMs, viewEndMs)
   }
 
   const bucketMs = INTERVAL_BUCKET_MS[interval]
