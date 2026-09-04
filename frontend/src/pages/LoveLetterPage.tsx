@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { type FormEvent, useCallback, useState } from 'react'
 
 const LETTER = `Jag har varit så överväldigad och utmattad på sistone, och jag vet att du också går igenom en riktigt tuff period... Jag är så ledsen att jag inte har funnits där för att lyssna på dig, umgås och stötta dig.
 
@@ -18,7 +18,9 @@ const HEARTS = Array.from({ length: 42 }, (_, index) => ({
 }))
 
 export default function LoveLetterPage() {
-  const [accepted, setAccepted] = useState(false)
+  const [step, setStep] = useState<'question' | 'birthday' | 'letter'>('question')
+  const [birthday, setBirthday] = useState('')
+  const [birthdayError, setBirthdayError] = useState(false)
   const [noPosition, setNoPosition] = useState({ left: '56%', top: '61%' })
 
   const moveNoButton = useCallback(() => {
@@ -34,18 +36,28 @@ export default function LoveLetterPage() {
     })
   }, [])
 
+  const checkBirthday = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (birthday === '0321') {
+      setBirthdayError(false)
+      setStep('letter')
+      return
+    }
+    setBirthdayError(true)
+  }
+
   return (
-    <main className={`love-experience ${accepted ? 'is-accepted' : ''}`}>
+    <main className={`love-experience ${step === 'letter' ? 'is-accepted' : ''}`}>
       <div className="love-ambient love-ambient-one" />
       <div className="love-ambient love-ambient-two" />
 
-      {!accepted ? (
+      {step === 'question' && (
         <section className="love-question-card" aria-labelledby="love-question">
           <span className="love-envelope" aria-hidden="true">💌</span>
           <p className="love-eyebrow">ONE IMPORTANT QUESTION</p>
           <h2 id="love-question">Do you love me?</h2>
           <p className="love-hint">Choose carefully, my love ♡</p>
-          <button className="love-yes-button" type="button" onClick={() => setAccepted(true)}>
+          <button className="love-yes-button" type="button" onClick={() => setStep('birthday')}>
             YES <span aria-hidden="true">♥</span>
           </button>
           <button
@@ -62,7 +74,36 @@ export default function LoveLetterPage() {
             NO
           </button>
         </section>
-      ) : (
+      )}
+
+      {step === 'birthday' && (
+        <section className="love-question-card love-birthday-card" aria-labelledby="birthday-question">
+          <span className="love-envelope" aria-hidden="true">🎂</span>
+          <p className="love-eyebrow">ONE LITTLE CHECK</p>
+          <h2 id="birthday-question">Type your birthday</h2>
+          <p className="love-hint">ex. 0116</p>
+          <form className="love-birthday-form" onSubmit={checkBirthday}>
+            <input
+              value={birthday}
+              onChange={(event) => {
+                setBirthday(event.target.value.replace(/\D/g, '').slice(0, 4))
+                setBirthdayError(false)
+              }}
+              inputMode="numeric"
+              autoComplete="off"
+              autoFocus
+              maxLength={4}
+              placeholder="MMDD"
+              aria-label="Type your birthday in four digits"
+              aria-invalid={birthdayError}
+            />
+            <button type="submit">OPEN MY LETTER ♥</button>
+          </form>
+          {birthdayError && <p className="love-birthday-error" role="alert">Hmm… try our special date again ♡</p>}
+        </section>
+      )}
+
+      {step === 'letter' && (
         <section className="love-answer" aria-live="polite">
           <div className="heart-rain" aria-hidden="true">
             {HEARTS.map((heart) => (
@@ -79,6 +120,10 @@ export default function LoveLetterPage() {
             <div className="love-letter-copy">
               {LETTER.split('\n\n').map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
             </div>
+            <figure className="love-photo-frame">
+              <img src="/love-photo.jpg" alt="Our hands held together" />
+              <figcaption>I LOVE YOU MAHA ❤️</figcaption>
+            </figure>
             <p className="love-signoff">Forever yours ♡</p>
           </div>
         </section>
