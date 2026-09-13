@@ -7,21 +7,20 @@ import RoleTabs, { type AppRole } from './components/RoleTabs'
 import ConsumerDashboard from './pages/ConsumerDashboard'
 import ProducerDashboard from './pages/ProducerDashboard'
 import PresentationDashboard from './pages/PresentationDashboard'
-import LoveLetterPage from './pages/LoveLetterPage'
 import { Zap, AlertCircle } from 'lucide-react'
 
 const ROLE_SUBTITLE: Record<AppRole, string> = {
   consumer: '소비자 · 전력 사용 및 P2P 정산',
   producer: '생산자 · 전력 생산 및 판매 관리',
   presentation: '프레젠테이션 · 태블릿 시연',
-  love: 'A little something made with love',
+
 }
 
 export default function App() {
-  const [role, setRole] = useState<AppRole>('love')
+  const [role, setRole] = useState<AppRole>('presentation')
   const wallet = useWallet()
   const isPresentation = role === 'presentation'
-  const isLove = role === 'love'
+
 
   useEffect(() => {
     if (wallet.address) writeStoredWallet(STORAGE_PAYER_WALLET, wallet.address)
@@ -29,7 +28,7 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={200}>
-    <div className={`min-h-screen ${isLove ? 'love-page-shell' : isPresentation ? 'bg-slate-100' : 'bg-bg-chat'}`}>
+    <div className={`min-h-screen ${isPresentation ? 'bg-slate-100' : 'bg-bg-chat'}`}>
       <div className={`mx-auto px-4 py-4 md:py-6 ${isPresentation ? 'max-w-7xl' : 'max-w-6xl'}`}>
         <header className={`flex flex-col gap-4 ${isPresentation ? 'mb-3' : 'mb-6'}`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -56,7 +55,7 @@ export default function App() {
                 </p>
               </div>
             </div>
-            <div className={`items-center gap-2 self-end sm:self-auto ${isLove ? 'hidden' : 'flex'}`}>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
               <WalletButton wallet={wallet} onConnect={wallet.connect} onDisconnect={wallet.disconnect} />
             </div>
           </div>
@@ -73,9 +72,9 @@ export default function App() {
         {role === 'consumer' && <ConsumerDashboard wallet={wallet} />}
         {role === 'producer' && <ProducerDashboard wallet={wallet} />}
         {role === 'presentation' && <PresentationDashboard wallet={wallet} />}
-        {role === 'love' && <LoveLetterPage />}
 
-        {!isPresentation && !isLove && (
+
+        {!isPresentation && (
           <footer className="mt-6 pt-4 border-t border-border-base flex flex-wrap items-center justify-between gap-2 text-[10px] text-fg-muted">
             <span>에너지 계량기 · {ROLE_SUBTITLE[role]}</span>
             <span>Arbitrum Sepolia Testnet</span>

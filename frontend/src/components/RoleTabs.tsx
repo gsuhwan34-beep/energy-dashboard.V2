@@ -1,6 +1,6 @@
-import { Heart, Home, Sun, Monitor } from 'lucide-react'
+import { Home, Sun, Monitor } from 'lucide-react'
 
-export type AppRole = 'consumer' | 'producer' | 'presentation' | 'love'
+export type AppRole = 'consumer' | 'producer' | 'presentation'
 
 interface Props {
   role: AppRole
@@ -11,7 +11,7 @@ const TABS: { id: AppRole; label: string; icon: typeof Home }[] = [
   { id: 'consumer', label: '소비자', icon: Home },
   { id: 'producer', label: '생산자', icon: Sun },
   { id: 'presentation', label: '프레젠테이션', icon: Monitor },
-  { id: 'love', label: 'For You', icon: Heart },
+
 ]
 
 export default function RoleTabs({ role, onChange }: Props) {
@@ -26,8 +26,6 @@ export default function RoleTabs({ role, onChange }: Props) {
             role === tab.id
               ? tab.id === 'presentation'
                 ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md'
-                : tab.id === 'love'
-                  ? 'bg-gradient-to-r from-pink-500 to-rose-400 text-white shadow-md'
                 : 'bg-brand-100 text-white shadow-sm'
               : 'text-fg-subtle hover:text-fg-base hover:bg-bg-base-opaque'
           }`}
